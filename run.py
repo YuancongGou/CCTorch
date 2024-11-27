@@ -5,6 +5,14 @@ import threading
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 
+import warnings
+
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    message="Failed to load image Python extension: .*"
+)
+
 import h5py
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -197,9 +205,9 @@ def main(args):
             if config is not None:
                 for k, v in config.items():
                     setattr(self, k, v)
-
+    #print(config)
     ccconfig = CCConfig(config)
-
+    #print(ccconfig.mode)
     ## Sanity check
     if args.mode == "TM":
         pass
@@ -250,6 +258,8 @@ def main(args):
         preprocess.append(TemporalMovingNormalization(int(2 * ccconfig.fs // ccconfig.decimate_factor)))  # 2s for 25Hz
 
     preprocess = T.Compose(preprocess)
+    ##
+    preprocess = None
 
     postprocess = []
     if args.mode == "CC":
@@ -326,7 +336,10 @@ def main(args):
         transforms=postprocess,
     )
     ccmodel.to(args.device)
-
+    #print('loading model finished')
+    #args.mode = "CC"
+    #print(type(result))
+    
     if args.mode == "CC":
         picks = pd.read_csv(args.picks_csv)
         picks.set_index("idx_pick", inplace=True)
@@ -549,6 +562,32 @@ def main(args):
         events_df.sort_values(by="event_time", inplace=True)
         picks_df.to_csv(os.path.join(args.result_path, f"{ccconfig.mode}_{world_size:03d}_pick.csv"), index=False)
         events_df.to_csv(os.path.join(args.result_path, f"{ccconfig.mode}_{world_size:03d}_event.csv"), index=False)
+
+    if args.mode == "AN":
+
+        result_df = []
+        for i, data in enumerate(tqdm(dataloader, position=rank, desc=f"{rank}/{world_size}: computing")):
+
+            if args.dataset_type == 'iterable':
+               result = ccmodel(data) 
+            if args.dataset_type == 'map':
+               result = ccmodel.forward_map(data)
+        
+            #print(type(result))
+            with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_block_{i:02d}.h5"), "w") as fp:
+                 # Store each key-value pair
+                 for key, value in result.items():
+                     if isinstance(value, np.ndarray):  # Save arrays directly
+                         fp.create_dataset(key, data=value)
+                     elif isinstance(value, torch.Tensor):  # Convert tensors to NumPy
+                         fp.create_dataset(key, data=value.numpy())
+                     elif isinstance(value, list):  # Convert list to NumPy
+                         fp.create_dataset(key, data=np.array(value))
+                     elif isinstance(value, (int, float, str)):  # Save scalars and strings
+                         fp.attrs[key] = value
+                     else:
+                         print(f"Skipping key {key}: unsupported data type {type(value)}")
+            
 
     # MAX_THREADS = 32
     # with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}.h5"), "w") as fp:

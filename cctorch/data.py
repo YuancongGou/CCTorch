@@ -81,14 +81,14 @@ class CCDataset(Dataset):
                     continue
 
                 if event1[ii] not in index_dict:
-                    data_dict = read_data(event1[ii], self.data_path1, self.data_format1)
+                    data_dict = read_data(event1[ii], self.data_path1, self.data_format1,self.config.mode,self.config)
                     data.append(torch.tensor(data_dict["data"]))
                     info.append(data_dict["info"])
                     index_dict[event1[ii]] = len(data) - 1
                 idx1 = index_dict[event1[ii]]
 
                 if event2[jj] not in index_dict:
-                    data_dict = read_data(event2[jj], self.data_path2, self.data_format2)
+                    data_dict = read_data(event2[jj], self.data_path2, self.data_format2,self.config.mode,self.config)
                     data.append(torch.tensor(data_dict["data"]))
                     info.append(data_dict["info"])
                     index_dict[event2[jj]] = len(data) - 1
@@ -101,6 +101,7 @@ class CCDataset(Dataset):
             pair_index = torch.tensor(pair_index).to(self.device)
 
             if self.transforms is not None:
+                print(self.transforms)
                 data = self.transforms(data)
         else:
             data = torch.empty((1, 1, 1), dtype=torch.float32).to(self.device)
@@ -179,6 +180,16 @@ class CCIterableDataset(IterableDataset):
 
         if self.mode == "AN":
             ## For ambient noise, we split chunks in the sampling function
+            #self.data_list1 = self.data_list1[rank::world_size]
+            if data_list1 is not None:
+                if data_list1.endswith(".txt"):
+                    with open(data_list1, "r") as fp:
+                        self.data_list1 = fp.read().splitlines()
+                else:
+                    self.data_list1 = pd.read_csv(data_list1).set_index("idx_pick")
+            else:
+                self.data_list1 = None
+
             self.data_list1 = self.data_list1[rank::world_size]
         else:
             block_num1 = int(np.ceil(len(unique_row) / block_size1))
@@ -487,6 +498,7 @@ class CCIterableDataset(IterableDataset):
             for i, j in block_index:
                 block1 = group_1[i]
                 block2 = group_2[j]
+                #print((i,j))
                 index_i = []
                 index_j = []
                 for ii, jj in itertools.product(block1, block2):
@@ -578,12 +590,15 @@ def generate_pairs(event1, event2, auto_xcorr=False, symmetric=False):
 
 
 def generate_block_index(group1, group2, pair_list=None, auto_xcorr=False, symmetric=False, min_sample_per_block=1):
+    #print(group1)
+    #print(group2)
     block_index = [(i, j) for i in range(len(group1)) for j in range(len(group2))]
     num_empty_index = []
     for i, j in tqdm(block_index, desc="Generating blocks"):
         num_samples = 0
         event1, event2 = group1[i], group2[j]
         pairs = generate_pairs(event1, event2, auto_xcorr=auto_xcorr, symmetric=symmetric)
+        print(pairs)
         if pair_list is None:
             num_samples = len(pairs)
         else:
@@ -780,7 +795,7 @@ def read_das_continuous_data_h5(fn, dataset_keys=[]):
         info = {}
         for key in dataset_keys:
             info[key] = f[key][:]
-    return data, info
+    return torch.tensor(data), info
 
 
 def get_shape_das_continuous_data_h5(file):
