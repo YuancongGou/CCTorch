@@ -150,7 +150,7 @@ class CCIterableDataset(IterableDataset):
         self.dtype = dtype
         self.num_batch = None
 
-        self.pair_matrix, self.row_matrix, self.col_matrix, unique_row, unique_col = self.read_pairs(pair_list)
+        #self.pair_matrix, self.row_matrix, self.col_matrix, unique_row, unique_col = self.read_pairs(pair_list)
         if self.mode in ["CC", "TM"]:
             self.time_before = {"P": config.time_before_p, "S": config.time_before_s}
         if self.mode == "CC":
@@ -453,6 +453,7 @@ class CCIterableDataset(IterableDataset):
                 }
 
     def sample_ambient_noise(self, data_list):
+        #print(data_list)
         for fd in data_list:
             meta = read_data(fd, self.data_path1, self.data_format1, mode=self.mode)  # (nch, nt)
             data = meta["data"].float().unsqueeze(0).unsqueeze(0)  # (1, 1, nx, nt)
