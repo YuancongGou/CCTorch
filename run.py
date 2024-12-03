@@ -259,7 +259,7 @@ def main(args):
 
     preprocess = T.Compose(preprocess)
     ##
-    preprocess = None
+    #preprocess = None
 
     postprocess = []
     if args.mode == "CC":
