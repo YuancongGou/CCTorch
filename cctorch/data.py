@@ -181,6 +181,7 @@ class CCIterableDataset(IterableDataset):
         if self.mode == "AN":
             ## For ambient noise, we split chunks in the sampling function
             #self.data_list1 = self.data_list1[rank::world_size]
+            # test
             if data_list1 is not None:
                 if data_list1.endswith(".txt"):
                     with open(data_list1, "r") as fp:
