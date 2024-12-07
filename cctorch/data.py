@@ -791,6 +791,8 @@ def read_das_continuous_data_h5(fn, dataset_keys=[]):
             data = f["Data"][:]
         elif "data" in f:
             data = f["data"][:]
+        elif "Acquisition" in f:  #### SeaFOAM, temporal 
+            data = f['Acquisition']['Raw[0]']['RawData'][:].T
         else:
             raise ValueError("Cannot find data in the file")
         info = {}

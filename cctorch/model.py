@@ -58,7 +58,7 @@ class CCModel(nn.Module):
         else:
             data1 = x1["data"]
             data2 = x2["data"]
-
+        print('Domain : ' + self.domain)
         if self.domain == "frequency":
             # xcorr with fft in frequency domain
             nfast = (data1.shape[-1] - 1) * 2
@@ -72,6 +72,7 @@ class CCModel(nn.Module):
                 xcor_freq = data1 * torch.conj(data2)
             xcor_time = torch.fft.irfft(xcor_freq, n=nfast, dim=-1)
             xcor = torch.roll(xcor_time, nfast // 2, dims=-1)[..., nfast // 2 - self.nlag : nfast // 2 + self.nlag + 1]
+            nlag = self.nlag
 
         elif self.domain == "time":
             ## using conv1d in time domain
@@ -141,6 +142,7 @@ class CCModel(nn.Module):
             xcor = torch.fft.irfft(torch.sum(data1 * torch.conj(data2), dim=-1), dim=-1)
             xcor = torch.roll(xcor, self.nlag, dims=-1)
             xcor = xcor.view(nb1, nc1, nx1, -1)
+            nlag = self.nlag
 
         else:
             raise ValueError("domain should be frequency or time or stft")

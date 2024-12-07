@@ -87,6 +87,8 @@ class TemporalGradient(torch.nn.Module):
         self.fs = fs
 
     def forward(self, data):
+        #print(f"fs is: {self.fs}")
+        print(f"Data is on: {data.device}")
         return torch.gradient(data, dim=-1)[0] * self.fs
 
 

@@ -26,7 +26,7 @@ from cctorch.utils import write_cc_pairs, write_tm_detects
 from sklearn.cluster import DBSCAN
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
+from time import time
 
 def get_args_parser(add_help=True):
     import argparse
@@ -160,7 +160,7 @@ def main(args):
         pre_fft = False  ## if true, do fft in dataloader
         auto_xcorr = args.auto_xcorr
 
-        ## ambinet noise
+        ## ambient noise
         spectral_whitening = True
         max_channel = args.max_channel
         min_channel = args.min_channel
@@ -180,7 +180,7 @@ def main(args):
         alpha = 0.05  # tukey window parameter
         order = 2
         #### Decimate
-        decimate_factor = 2
+        decimate_factor = 8
 
         ## cross-correlation
         nma = (20, 0)
@@ -238,24 +238,25 @@ def main(args):
         ## TODO add preprocess for template matching
         pass
     elif args.mode == "AN":
+        print('AN')
         ## TODO add preprocess for ambient noise
         if args.temporal_gradient:  ## convert to strain rate
             preprocess.append(TemporalGradient(ccconfig.fs))
-        preprocess.append(TemporalMovingNormalization(int(30 * ccconfig.fs)))  # 30s for 25Hz
-        preprocess.append(
-            Filtering(
-                ccconfig.fmin,
-                ccconfig.fmax,
-                ccconfig.fs,
-                ccconfig.ftype,
-                ccconfig.alpha,
-                ccconfig.dtype,
-                ccconfig.transform_device,
-            )
-        )  # 50Hz
+        # preprocess.append(TemporalMovingNormalization(int(30 * ccconfig.fs)))  # 30s for 25Hz
+        # preprocess.append(
+        #     Filtering(
+        #         ccconfig.fmin,
+        #         ccconfig.fmax,
+        #         ccconfig.fs,
+        #         ccconfig.ftype,
+        #         ccconfig.alpha,
+        #         ccconfig.dtype,
+        #         ccconfig.transform_device,
+        #     )
+        # )  # 50Hz
         preprocess.append(Decimation(ccconfig.decimate_factor))  # 25Hz
-        preprocess.append(T.Lambda(remove_spatial_median))
-        preprocess.append(TemporalMovingNormalization(int(2 * ccconfig.fs // ccconfig.decimate_factor)))  # 2s for 25Hz
+        #preprocess.append(T.Lambda(remove_spatial_median))
+        #preprocess.append(TemporalMovingNormalization(int(2 * ccconfig.fs // ccconfig.decimate_factor)))  # 2s for 25Hz
 
     preprocess = T.Compose(preprocess)
     ##
@@ -569,7 +570,9 @@ def main(args):
         for i, data in enumerate(tqdm(dataloader, position=rank, desc=f"{rank}/{world_size}: computing")):
 
             if args.dataset_type == 'iterable':
+               t1 = time() 
                result = ccmodel(data) 
+               print('time : ' + str(time()-t1))
             if args.dataset_type == 'map':
                result = ccmodel.forward_map(data)
         
@@ -587,7 +590,7 @@ def main(args):
                          fp.attrs[key] = value
                      else:
                          print(f"Skipping key {key}: unsupported data type {type(value)}")
-            
+
 
     # MAX_THREADS = 32
     # with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}.h5"), "w") as fp:
