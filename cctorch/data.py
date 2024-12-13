@@ -452,22 +452,107 @@ class CCIterableDataset(IterableDataset):
                     "info": info_batch2,
                 }
 
+    # def process_concat_data(self,data):
+
+    #     if (self.config.transform_on_file) and (self.transforms is not None):
+    #         data = self.transforms(data)
+
+    #     nb, nc, nx, nt = data.shape
+    #     ## cut blocks
+    #     min_channel = self.config.min_channel if self.config.min_channel is not None else 0
+    #     max_channel = self.config.max_channel if self.config.max_channel is not None else nx
+    #     left_channel = self.config.left_channel if self.config.left_channel is not None else -nx
+    #     right_channel = self.config.right_channel if self.config.right_channel is not None else nx
+    #     if self.config.fixed_channels is not None:
+    #         ## only process channels passed by "--fixed-channels" as source
+    #         lists_1 = (
+    #             self.config.fixed_channels
+    #             if isinstance(self.config.fixed_channels, list)
+    #             else [self.fixed_channels]
+    #         )
+    #     else:
+    #         ## using delta_channel to down-sample channels needed for ambient noise
+    #         ## using min_channel and max_channel to selected channels that are within a range
+    #         lists_1 = range(min_channel, max_channel, self.config.delta_channel)
+    #     lists_2 = range(min_channel, max_channel, self.config.delta_channel)
+    #     block_num1 = int(np.ceil(len(lists_1) / self.block_size1))
+    #     block_num2 = int(np.ceil(len(lists_2) / self.block_size2))
+    #     group_1 = [list(x) for x in np.array_split(lists_1, block_num1) if len(x) > 0]
+    #     group_2 = [list(x) for x in np.array_split(lists_2, block_num2) if len(x) > 0]
+    #     block_index = list(itertools.product(range(len(group_1)), range(len(group_2))))
+    #     ## loop each block
+    #     for i, j in block_index:
+    #         block1 = group_1[i]
+    #         block2 = group_2[j]
+    #         #print((i,j))
+    #         index_i = []
+    #         index_j = []
+    #         for ii, jj in itertools.product(block1, block2):
+    #             if (jj < (ii + left_channel)) or (jj > (ii + right_channel)):
+    #                 continue
+    #             index_i.append(ii)
+    #             index_j.append(jj)
+    #         data_i = data[:, :, index_i, :].to(self.device)
+    #         data_j = data[:, :, index_j, :].to(self.device)
+    #         if (self.config.transform_on_batch) and (self.transforms is not None):
+    #             data_i = self.transforms(data_i)
+    #             data_j = self.transforms(data_j)
+    #         data_dict =  {
+    #             "data": data_i,
+    #             "index": [index_i],
+    #             "info": {},
+    #         }, {"data": data_j, "index": [index_j], "info": {}}
+            
+    #         yield data_dict
+    
     def sample_ambient_noise(self, data_list):
+        #from time import time
         #print(data_list)
-        for fd in data_list:
+        #concat_data = []
+        #concat_size = 2
+        
+        for i,fd in enumerate(data_list):
             meta = read_data(fd, self.data_path1, self.data_format1, mode=self.mode)  # (nch, nt)
             data = meta["data"].float().unsqueeze(0).unsqueeze(0)  # (1, 1, nx, nt)
+
+        #     concat_data.append(data)
+   
+        #     # Process when batch is full
+        #     if (i + 1) % concat_size == 0:
+        #         # Concatenate the current batch
+        #         t1 = time()
+        #         if concat_size == 1:
+        #             concatenated_data = data
+        #         else:
+        #             concatenated_data = torch.cat(concat_data, dim=-1)  # Adjust axis as needed
+        #         print('con time : ' +str(time()-t1))    
+        #         #print(concatenated_data.shape)
+                
+        #         # Proceed with further processing for this batch
+        #         for processed_data in self.process_concat_data(concatenated_data):
+        #             yield processed_data
+                
+        #         # Clear the batch for the next set
+        #         concat_data = []
+        
+        #     # Process any remaining data (if the total isn't a multiple of batch_size)
+        # if concat_data:
+        #    concatenated_data = torch.cat(concat_data, dim=-1)  # Adjust axis as needed
+        #    for processed_data in self.process_concat_data(concatenated_data):
+        #        yield processed_data
+
+            
 
             if (self.config.transform_on_file) and (self.transforms is not None):
                 data = self.transforms(data)
 
-            # plt.figure()
-            # tmp = data[0, 0, :, :].cpu().numpy()
-            # vmax = np.std(tmp[:, -1000:]) * 5
-            # plt.imshow(tmp[:, -1000:], aspect="auto", vmin=-vmax, vmax=vmax, cmap="seismic")
-            # plt.colorbar()
-            # plt.savefig(f"cctorch_step1_{fd.split('/')[-1]}.png", dpi=300)
-            # raise
+            ## plt.figure()
+            ## tmp = data[0, 0, :, :].cpu().numpy()
+            ## vmax = np.std(tmp[:, -1000:]) * 5
+            ## plt.imshow(tmp[:, -1000:], aspect="auto", vmin=-vmax, vmax=vmax, cmap="seismic")
+            ## plt.colorbar()
+            ## plt.savefig(f"cctorch_step1_{fd.split('/')[-1]}.png", dpi=300)
+            ## raise
 
             nb, nc, nx, nt = data.shape
 
@@ -599,7 +684,7 @@ def generate_block_index(group1, group2, pair_list=None, auto_xcorr=False, symme
         num_samples = 0
         event1, event2 = group1[i], group2[j]
         pairs = generate_pairs(event1, event2, auto_xcorr=auto_xcorr, symmetric=symmetric)
-        print(pairs)
+        #print(pairs)
         if pair_list is None:
             num_samples = len(pairs)
         else:
@@ -786,6 +871,7 @@ def read_mseed_3c(fname, response=None, highpass_filter=0.0, sampling_rate=100, 
 
 
 def read_das_continuous_data_h5(fn, dataset_keys=[]):
+    #print(fn)
     with h5py.File(fn, "r") as f:
         if "Data" in f:
             data = f["Data"][:]

@@ -15,6 +15,7 @@ class CCModel(nn.Module):
         batch_size=16,
         to_device=False,
         device="cuda",
+        temporal_gradient=False,
     ):
         super(CCModel, self).__init__()
         self.dt = config.dt
@@ -34,6 +35,8 @@ class CCModel(nn.Module):
         self.batch_size = batch_size
         self.to_device = to_device
         self.device = device
+
+        self.temporal_gradient = temporal_gradient
 
         # TM
         self.shift_t = config.shift_t
@@ -58,7 +61,12 @@ class CCModel(nn.Module):
         else:
             data1 = x1["data"]
             data2 = x2["data"]
-        print('Domain : ' + self.domain)
+            
+        # if self.temporal_gradient:
+        #     data1 = torch.gradient(data1, dim=-1)[0] / self.dt
+        #     data2 = torch.gradient(data2, dim=-1)[0] / self.dt
+        
+        #print('Domain : ' + self.domain)
         if self.domain == "frequency":
             # xcorr with fft in frequency domain
             nfast = (data1.shape[-1] - 1) * 2

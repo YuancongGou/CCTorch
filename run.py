@@ -174,7 +174,7 @@ def main(args):
         transform_device = "cpu"
         window_size = 64
         #### bandpass filter
-        fmin = 0.1
+        fmin = 0.5
         fmax = 10
         ftype = "bandpass"
         alpha = 0.05  # tukey window parameter
@@ -240,23 +240,23 @@ def main(args):
     elif args.mode == "AN":
         print('AN')
         ## TODO add preprocess for ambient noise
-        if args.temporal_gradient:  ## convert to strain rate
-            preprocess.append(TemporalGradient(ccconfig.fs))
+        # if args.temporal_gradient:  ## convert to strain rate
+        #     preprocess.append(TemporalGradient(ccconfig.fs))
         # preprocess.append(TemporalMovingNormalization(int(30 * ccconfig.fs)))  # 30s for 25Hz
-        # preprocess.append(
-        #     Filtering(
-        #         ccconfig.fmin,
-        #         ccconfig.fmax,
-        #         ccconfig.fs,
-        #         ccconfig.ftype,
-        #         ccconfig.alpha,
-        #         ccconfig.dtype,
-        #         ccconfig.transform_device,
-        #     )
-        # )  # 50Hz
+        preprocess.append(
+            Filtering(
+                ccconfig.fmin,
+                ccconfig.fmax,
+                ccconfig.fs,
+                ccconfig.ftype,
+                ccconfig.alpha,
+                ccconfig.dtype,
+                ccconfig.transform_device,
+            )
+        )  # 50Hz
         preprocess.append(Decimation(ccconfig.decimate_factor))  # 25Hz
-        #preprocess.append(T.Lambda(remove_spatial_median))
-        #preprocess.append(TemporalMovingNormalization(int(2 * ccconfig.fs // ccconfig.decimate_factor)))  # 2s for 25Hz
+        preprocess.append(T.Lambda(remove_spatial_median))
+        preprocess.append(TemporalMovingNormalization(int(2 * ccconfig.fs // ccconfig.decimate_factor)))  # 2s for 25Hz
 
     preprocess = T.Compose(preprocess)
     ##
@@ -323,18 +323,21 @@ def main(args):
     dataloader = DataLoader(
         dataset,
         batch_size=None,
-        num_workers=args.workers if args.dataset_type == "map" else 0,
+        #num_workers=args.workers if (args.dataset_type == "map") else 16,
+        num_workers=args.workers,
         sampler=sampler if args.dataset_type == "map" else None,
         pin_memory=False,
+        #prefetch_factor=2,
         collate_fn=lambda x: x,
     )
-
+    
     ccmodel = CCModel(
         config=ccconfig,
         batch_size=args.batch_size,  ## only useful for dataset_type == map
         to_device=False,  ## to_device is done in dataset in default
         device=args.device,
         transforms=postprocess,
+        temporal_gradient=args.temporal_gradient
     )
     ccmodel.to(args.device)
     #print('loading model finished')
@@ -571,12 +574,18 @@ def main(args):
 
             if args.dataset_type == 'iterable':
                t1 = time() 
+               if i!=0:
+                  print(str(i)+' dataloader time : ' + str(t1-t2))
                result = ccmodel(data) 
-               print('time : ' + str(time()-t1))
+               t2 = time()
+               #print('model time : ' + str(time()-t1))
+               
+            
             if args.dataset_type == 'map':
                result = ccmodel.forward_map(data)
         
             #print(type(result))
+                
             with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_block_{i:02d}.h5"), "w") as fp:
                  # Store each key-value pair
                  for key, value in result.items():
