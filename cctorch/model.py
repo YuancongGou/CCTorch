@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
-
+from cctorch.transforms import *
 
 class CCModel(nn.Module):
     def __init__(
@@ -15,7 +15,10 @@ class CCModel(nn.Module):
         batch_size=16,
         to_device=False,
         device="cuda",
-        temporal_gradient=False,
+        temporal_gradient_params=None,  # Parameters for temporal gradient
+        filtering_params=None,  # Parameters for filtering
+        decimation_params=None,  # Parameters for decimation
+        temporal_norm_params=None,  # Parameters for temporal moving normalization        
     ):
         super(CCModel, self).__init__()
         self.dt = config.dt
@@ -35,8 +38,30 @@ class CCModel(nn.Module):
         self.batch_size = batch_size
         self.to_device = to_device
         self.device = device
+        
+        # Initialize filtering if parameters are provided
+        if filtering_params:
+            self.filtering = Filtering(**filtering_params)
+        else:
+            self.filtering = None
 
-        self.temporal_gradient = temporal_gradient
+        # Initialize temporal moving normalization if parameters are provided
+        if temporal_norm_params:
+            self.temporal_norm = TemporalMovingNormalization(**temporal_norm_params)
+        else:
+            self.temporal_norm = None
+
+        # Initialize temporal gradient if parameters are provided
+        if temporal_gradient_params:
+            self.temp_gradient = TemporalGradient(**temporal_gradient_params)
+        else:
+            self.temp_gradient = None
+
+        # Initialize decimation if parameters are provided
+        if decimation_params:
+            self.decimation = Decimation(**decimation_params)
+        else:
+            self.decimation = None
 
         # TM
         self.shift_t = config.shift_t
@@ -61,11 +86,27 @@ class CCModel(nn.Module):
         else:
             data1 = x1["data"]
             data2 = x2["data"]
+
+        # Apply temporal gradient if enabled
+        if self.temp_gradient:
+            data1 = self.temp_gradient(data1)
+            data2 = self.temp_gradient(data2)
             
-        # if self.temporal_gradient:
-        #     data1 = torch.gradient(data1, dim=-1)[0] / self.dt
-        #     data2 = torch.gradient(data2, dim=-1)[0] / self.dt
+        # Apply filtering if enabled
+        if self.filtering:
+            data1 = self.filtering(data1)
+            data2 = self.filtering(data2)
+
+        # Apply decimation if enabled
+        if self.decimation:
+            data1 = self.decimation(data1)
+            data2 = self.decimation(data2)
         
+        # Apply temporal moving normalization if enabled
+        if self.temporal_norm:
+            data1 = self.temporal_norm(data1)
+            data2 = self.temporal_norm(data2)
+
         #print('Domain : ' + self.domain)
         if self.domain == "frequency":
             # xcorr with fft in frequency domain

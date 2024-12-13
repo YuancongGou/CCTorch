@@ -28,6 +28,9 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from time import time
 
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+
 def get_args_parser(add_help=True):
     import argparse
 
@@ -126,6 +129,7 @@ def get_args_parser(add_help=True):
     # distributed training parameters
     parser.add_argument("--world-size", default=1, type=int, help="number of distributed processes")
     parser.add_argument("--dist-url", default="env://", type=str, help="url used to set up distributed training")
+    parser.add_argument("--distributed", action="store_true", help="Enable distributed training across multiple GPUs")
     return parser
 
 
@@ -239,24 +243,47 @@ def main(args):
         pass
     elif args.mode == "AN":
         print('AN')
+
+        filtering_params = {
+                            "fmin": ccconfig.fmin,
+                            "fmax": ccconfig.fmax,
+                            "fs": ccconfig.fs,
+                            "ftype": ccconfig.ftype,
+                            "alpha": ccconfig.alpha,
+                            "dtype": ccconfig.dtype,
+                            "device": 'cuda',
+                           }
+
+        temporal_norm_params = {
+                               "window_size": int(2 * ccconfig.fs // ccconfig.decimate_factor),
+                               }
+
+        temporal_gradient_params = {
+                                   "fs": ccconfig.fs,
+                                   }
+                               
+        decimation_params = {
+                            "decimation": ccconfig.decimate_factor,
+                            }
+        
         ## TODO add preprocess for ambient noise
         # if args.temporal_gradient:  ## convert to strain rate
         #     preprocess.append(TemporalGradient(ccconfig.fs))
         # preprocess.append(TemporalMovingNormalization(int(30 * ccconfig.fs)))  # 30s for 25Hz
-        preprocess.append(
-            Filtering(
-                ccconfig.fmin,
-                ccconfig.fmax,
-                ccconfig.fs,
-                ccconfig.ftype,
-                ccconfig.alpha,
-                ccconfig.dtype,
-                ccconfig.transform_device,
-            )
-        )  # 50Hz
-        preprocess.append(Decimation(ccconfig.decimate_factor))  # 25Hz
-        preprocess.append(T.Lambda(remove_spatial_median))
-        preprocess.append(TemporalMovingNormalization(int(2 * ccconfig.fs // ccconfig.decimate_factor)))  # 2s for 25Hz
+        # preprocess.append(
+        #     Filtering(
+        #         ccconfig.fmin,
+        #         ccconfig.fmax,
+        #         ccconfig.fs,
+        #         ccconfig.ftype,
+        #         ccconfig.alpha,
+        #         ccconfig.dtype,
+        #         ccconfig.transform_device,
+        #     )
+        # )  # 50Hz
+        # preprocess.append(Decimation(ccconfig.decimate_factor))  # 25Hz
+        # preprocess.append(T.Lambda(remove_spatial_median))
+        # preprocess.append(TemporalMovingNormalization(int(2 * ccconfig.fs // ccconfig.decimate_factor)))  # 2s for 25Hz
 
     preprocess = T.Compose(preprocess)
     ##
@@ -323,26 +350,40 @@ def main(args):
     dataloader = DataLoader(
         dataset,
         batch_size=None,
-        #num_workers=args.workers if (args.dataset_type == "map") else 16,
+        #num_workers=args.workers if (args.dataset_type == "map") else 0,
         num_workers=args.workers,
         sampler=sampler if args.dataset_type == "map" else None,
         pin_memory=False,
-        #prefetch_factor=2,
+        #prefetch_factor=4,
         collate_fn=lambda x: x,
     )
     
+    # dataloader = DataLoader(
+    #     dataset,
+    #     batch_size=args.batch_size,
+    #     num_workers=args.workers,
+    #     sampler=sampler,
+    #     pin_memory=True,
+    # )
+
     ccmodel = CCModel(
         config=ccconfig,
         batch_size=args.batch_size,  ## only useful for dataset_type == map
         to_device=False,  ## to_device is done in dataset in default
         device=args.device,
         transforms=postprocess,
-        temporal_gradient=args.temporal_gradient
+        temporal_gradient_params=temporal_gradient_params,
+        filtering_params=filtering_params,
+        decimation_params=decimation_params,
+        temporal_norm_params=temporal_norm_params,
     )
-    ccmodel.to(args.device)
-    #print('loading model finished')
-    #args.mode = "CC"
-    #print(type(result))
+    
+    #ccmodel.to(args.device)
+
+    ccmodel.to(rank)  # Use the local rank (GPU ID)
+    if args.distributed:
+        ccmodel = torch.nn.parallel.DistributedDataParallel(ccmodel, device_ids=[rank])
+
     
     if args.mode == "CC":
         picks = pd.read_csv(args.picks_csv)
@@ -622,5 +663,9 @@ def main(args):
 
 
 if __name__ == "__main__":
+
     args = get_args_parser().parse_args()
+    # if args.distributed:
+    #    dist.init_process_group(backend="nccl", init_method=args.dist_url, world_size=args.world_size)
+    #    torch.cuda.set_device(rank)
     main(args)
