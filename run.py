@@ -28,8 +28,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from time import time
 
-os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+# os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
 def get_args_parser(add_help=True):
     import argparse
@@ -129,8 +129,10 @@ def get_args_parser(add_help=True):
     # distributed training parameters
     parser.add_argument("--world-size", default=1, type=int, help="number of distributed processes")
     parser.add_argument("--dist-url", default="env://", type=str, help="url used to set up distributed training")
-    parser.add_argument("--distributed", action="store_true", help="Enable distributed training across multiple GPUs")
+    #parser.add_argument("--distributed", action="store_true", help="Enable distributed training across multiple GPUs")
     return parser
+
+
 
 
 def main(args):
@@ -331,7 +333,7 @@ def main(args):
             data_path2=args.data_path2,
             data_format1=args.data_format1,
             data_format2=args.data_format2,
-            device=args.device,
+            device='cpu',
             transforms=preprocess,
             batch_size=args.batch_size,
             rank=rank,
@@ -356,6 +358,7 @@ def main(args):
         pin_memory=False,
         #prefetch_factor=4,
         collate_fn=lambda x: x,
+        #persistent_workers=True
     )
     
     # dataloader = DataLoader(
@@ -369,7 +372,7 @@ def main(args):
     ccmodel = CCModel(
         config=ccconfig,
         batch_size=args.batch_size,  ## only useful for dataset_type == map
-        to_device=False,  ## to_device is done in dataset in default
+        to_device=True,  ## to_device is done in dataset in default
         device=args.device,
         transforms=postprocess,
         temporal_gradient_params=temporal_gradient_params,
@@ -378,11 +381,11 @@ def main(args):
         temporal_norm_params=temporal_norm_params,
     )
     
-    #ccmodel.to(args.device)
+    ccmodel.to(args.device)
 
-    ccmodel.to(rank)  # Use the local rank (GPU ID)
-    if args.distributed:
-        ccmodel = torch.nn.parallel.DistributedDataParallel(ccmodel, device_ids=[rank])
+    #ccmodel.to(rank)  # Use the local rank (GPU ID)
+    # if args.distributed:
+    #     ccmodel = torch.nn.parallel.DistributedDataParallel(ccmodel, device_ids=[rank])
 
     
     if args.mode == "CC":
@@ -626,7 +629,7 @@ def main(args):
                result = ccmodel.forward_map(data)
         
             #print(type(result))
-                
+            #t3 = time()    
             with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_block_{i:02d}.h5"), "w") as fp:
                  # Store each key-value pair
                  for key, value in result.items():
@@ -640,7 +643,8 @@ def main(args):
                          fp.attrs[key] = value
                      else:
                          print(f"Skipping key {key}: unsupported data type {type(value)}")
-
+            #t4 = time()
+            #print(str(i)+' write h5 time : ' + str(t4-t3))
 
     # MAX_THREADS = 32
     # with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}.h5"), "w") as fp:
@@ -663,7 +667,9 @@ def main(args):
 
 
 if __name__ == "__main__":
-
+    #import torch.multiprocessing as mp
+    #import multiprocessing as mp
+    #mp.set_start_method('spawn', force=True)
     args = get_args_parser().parse_args()
     # if args.distributed:
     #    dist.init_process_group(backend="nccl", init_method=args.dist_url, world_size=args.world_size)

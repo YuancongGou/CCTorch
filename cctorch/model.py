@@ -63,6 +63,7 @@ class CCModel(nn.Module):
         else:
             self.decimation = None
 
+
         # TM
         self.shift_t = config.shift_t
         self.normalize = config.normalize
@@ -106,6 +107,9 @@ class CCModel(nn.Module):
         if self.temporal_norm:
             data1 = self.temporal_norm(data1)
             data2 = self.temporal_norm(data2)
+
+        data1 = remove_spatial_median(data1)
+        data2 = remove_spatial_median(data2)
 
         #print('Domain : ' + self.domain)
         if self.domain == "frequency":
