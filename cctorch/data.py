@@ -452,59 +452,59 @@ class CCIterableDataset(IterableDataset):
                     "info": info_batch2,
                 }
 
-    def process_concat_data(self,data):
+    # def process_concat_data(self,data):
 
-        if (self.config.transform_on_file) and (self.transforms is not None):
-            data = self.transforms(data)
+    #     if (self.config.transform_on_file) and (self.transforms is not None):
+    #         data = self.transforms(data)
 
-        nb, nc, nx, nt = data.shape
-        ## cut blocks
-        min_channel = self.config.min_channel if self.config.min_channel is not None else 0
-        max_channel = self.config.max_channel if self.config.max_channel is not None else nx
-        left_channel = self.config.left_channel if self.config.left_channel is not None else -nx
-        right_channel = self.config.right_channel if self.config.right_channel is not None else nx
-        if self.config.fixed_channels is not None:
-            ## only process channels passed by "--fixed-channels" as source
-            lists_1 = (
-                self.config.fixed_channels
-                if isinstance(self.config.fixed_channels, list)
-                else [self.fixed_channels]
-            )
-        else:
-            ## using delta_channel to down-sample channels needed for ambient noise
-            ## using min_channel and max_channel to selected channels that are within a range
-            lists_1 = range(min_channel, max_channel, self.config.delta_channel)
-        lists_2 = range(min_channel, max_channel, self.config.delta_channel)
-        block_num1 = int(np.ceil(len(lists_1) / self.block_size1))
-        block_num2 = int(np.ceil(len(lists_2) / self.block_size2))
-        group_1 = [list(x) for x in np.array_split(lists_1, block_num1) if len(x) > 0]
-        group_2 = [list(x) for x in np.array_split(lists_2, block_num2) if len(x) > 0]
-        block_index = list(itertools.product(range(len(group_1)), range(len(group_2))))
-        ## loop each block
-        for i, j in block_index:
-            block1 = group_1[i]
-            block2 = group_2[j]
-            #print((i,j))
-            index_i = []
-            index_j = []
-            for ii, jj in itertools.product(block1, block2):
-                if (jj < (ii + left_channel)) or (jj > (ii + right_channel)):
-                    continue
-                index_i.append(ii)
-                index_j.append(jj)
-            #print('Device ::: ' + self.device)
-            data_i = data[:, :, index_i, :].to(self.device)
-            data_j = data[:, :, index_j, :].to(self.device)
-            if (self.config.transform_on_batch) and (self.transforms is not None):
-                data_i = self.transforms(data_i)
-                data_j = self.transforms(data_j)
-            data_dict =  {
-                "data": data_i,
-                "index": [index_i],
-                "info": {},
-            }, {"data": data_j, "index": [index_j], "info": {}}
+    #     nb, nc, nx, nt = data.shape
+    #     ## cut blocks
+    #     min_channel = self.config.min_channel if self.config.min_channel is not None else 0
+    #     max_channel = self.config.max_channel if self.config.max_channel is not None else nx
+    #     left_channel = self.config.left_channel if self.config.left_channel is not None else -nx
+    #     right_channel = self.config.right_channel if self.config.right_channel is not None else nx
+    #     if self.config.fixed_channels is not None:
+    #         ## only process channels passed by "--fixed-channels" as source
+    #         lists_1 = (
+    #             self.config.fixed_channels
+    #             if isinstance(self.config.fixed_channels, list)
+    #             else [self.fixed_channels]
+    #         )
+    #     else:
+    #         ## using delta_channel to down-sample channels needed for ambient noise
+    #         ## using min_channel and max_channel to selected channels that are within a range
+    #         lists_1 = range(min_channel, max_channel, self.config.delta_channel)
+    #     lists_2 = range(min_channel, max_channel, self.config.delta_channel)
+    #     block_num1 = int(np.ceil(len(lists_1) / self.block_size1))
+    #     block_num2 = int(np.ceil(len(lists_2) / self.block_size2))
+    #     group_1 = [list(x) for x in np.array_split(lists_1, block_num1) if len(x) > 0]
+    #     group_2 = [list(x) for x in np.array_split(lists_2, block_num2) if len(x) > 0]
+    #     block_index = list(itertools.product(range(len(group_1)), range(len(group_2))))
+    #     ## loop each block
+    #     for i, j in block_index:
+    #         block1 = group_1[i]
+    #         block2 = group_2[j]
+    #         #print((i,j))
+    #         index_i = []
+    #         index_j = []
+    #         for ii, jj in itertools.product(block1, block2):
+    #             if (jj < (ii + left_channel)) or (jj > (ii + right_channel)):
+    #                 continue
+    #             index_i.append(ii)
+    #             index_j.append(jj)
+    #         #print('Device ::: ' + self.device)
+    #         data_i = data[:, :, index_i, :].to(self.device)
+    #         data_j = data[:, :, index_j, :].to(self.device)
+    #         if (self.config.transform_on_batch) and (self.transforms is not None):
+    #             data_i = self.transforms(data_i)
+    #             data_j = self.transforms(data_j)
+    #         data_dict =  {
+    #             "data": data_i,
+    #             "index": [index_i],
+    #             "info": {},
+    #         }, {"data": data_j, "index": [index_j], "info": {}}
             
-            yield data_dict
+    #         yield data_dict
 
     # def sample_ambient_noise(self, data_list):
     #     from concurrent.futures import ThreadPoolExecutor
@@ -538,7 +538,7 @@ class CCIterableDataset(IterableDataset):
     
     
     def sample_ambient_noise(self, data_list):
-        from time import time
+        #from time import time
         #print(data_list)
         # concat_data = []
         # concat_size = 1

@@ -284,7 +284,7 @@ def main(args):
         #     )
         # )  # 50Hz
         # preprocess.append(Decimation(ccconfig.decimate_factor))  # 25Hz
-        # preprocess.append(T.Lambda(remove_spatial_median))
+        #preprocess.append(T.Lambda(remove_spatial_median))
         # preprocess.append(TemporalMovingNormalization(int(2 * ccconfig.fs // ccconfig.decimate_factor)))  # 2s for 25Hz
 
     preprocess = T.Compose(preprocess)
@@ -333,7 +333,7 @@ def main(args):
             data_path2=args.data_path2,
             data_format1=args.data_format1,
             data_format2=args.data_format2,
-            device='cpu',
+            device=args.device,
             transforms=preprocess,
             batch_size=args.batch_size,
             rank=rank,
@@ -349,6 +349,19 @@ def main(args):
     else:
         sampler = torch.utils.data.SequentialSampler(dataset)
 
+    # def move_to_device(data, device):
+    #     if isinstance(data, torch.Tensor):
+    #         return data.to(device)
+    #     elif isinstance(data, dict):
+    #         return {key: move_to_device(val, device) for key, val in data.items()}
+    #     elif isinstance(data, (list, tuple)):
+    #         return type(data)(move_to_device(val, device) for val in data)
+    #     else:
+    #         return data  # Non-tensor types are returned as-is
+
+    # def collate_fn(batch):
+    #     return move_to_device(batch, args.device)
+
     dataloader = DataLoader(
         dataset,
         batch_size=None,
@@ -356,8 +369,9 @@ def main(args):
         num_workers=args.workers,
         sampler=sampler if args.dataset_type == "map" else None,
         pin_memory=False,
-        #prefetch_factor=4,
+        #prefetch_factor=2,
         collate_fn=lambda x: x,
+        #collate_fn=collate_fn,
         #persistent_workers=True
     )
     
@@ -372,7 +386,7 @@ def main(args):
     ccmodel = CCModel(
         config=ccconfig,
         batch_size=args.batch_size,  ## only useful for dataset_type == map
-        to_device=True,  ## to_device is done in dataset in default
+        to_device=False,  ## to_device is done in dataset in default
         device=args.device,
         transforms=postprocess,
         temporal_gradient_params=temporal_gradient_params,
@@ -381,9 +395,9 @@ def main(args):
         temporal_norm_params=temporal_norm_params,
     )
     
-    ccmodel.to(args.device)
+    #ccmodel.to(args.device)
 
-    #ccmodel.to(rank)  # Use the local rank (GPU ID)
+    ccmodel.to(rank)  # Use the local rank (GPU ID)
     # if args.distributed:
     #     ccmodel = torch.nn.parallel.DistributedDataParallel(ccmodel, device_ids=[rank])
 
@@ -617,6 +631,8 @@ def main(args):
         for i, data in enumerate(tqdm(dataloader, position=rank, desc=f"{rank}/{world_size}: computing")):
 
             if args.dataset_type == 'iterable':
+
+               #data.to(arg.device)
                t1 = time() 
                if i!=0:
                   print(str(i)+' dataloader time : ' + str(t1-t2))

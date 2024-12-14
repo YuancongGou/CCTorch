@@ -108,8 +108,8 @@ class CCModel(nn.Module):
             data1 = self.temporal_norm(data1)
             data2 = self.temporal_norm(data2)
 
-        data1 = remove_spatial_median(data1)
-        data2 = remove_spatial_median(data2)
+        #data1 = remove_spatial_median(data1)
+        #data2 = remove_spatial_median(data2)
 
         #print('Domain : ' + self.domain)
         if self.domain == "frequency":
