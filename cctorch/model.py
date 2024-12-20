@@ -170,6 +170,7 @@ class CCModel(nn.Module):
                 xcor = xcor / nt2 / (std1 + eps)
 
             xcor = xcor.view(nb2, nc2, nx2, -1)
+            #print(xcor.shape)
 
             if self.reduce_x:
                 xcor = torch.sum(xcor, dim=(-2), keepdim=True)
@@ -205,8 +206,10 @@ class CCModel(nn.Module):
 
         meta = {
             "xcorr": xcor,
+            #"xcorr": xcor[:,:,:,749-250:749+250],
             "pair_index": pair_index,
             "nlag": nlag,
+            #"nlag": 10,
             "data1": x1["data"],
             "data2": x2["data"],
             "info1": x1["info"],

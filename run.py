@@ -650,12 +650,20 @@ def main(args):
                  # Store each key-value pair
                  for key, value in result.items():
                      if isinstance(value, np.ndarray):  # Save arrays directly
+                         # nlag = int(args.maxlag / args.dt)
+                         # left_sample = value.shape[-1]//2 - nlag
+                         # right_sample = value.shape[-1]//2 + nlag
+                         #fp.create_dataset(key, data=value[:,:,:,left_sample:right_sample])
                          fp.create_dataset(key, data=value)
                      elif isinstance(value, torch.Tensor):  # Convert tensors to NumPy
                          fp.create_dataset(key, data=value.numpy())
                      elif isinstance(value, list):  # Convert list to NumPy
                          fp.create_dataset(key, data=np.array(value))
                      elif isinstance(value, (int, float, str)):  # Save scalars and strings
+                         # if key == 'nlag':
+                         #     nlag = int(args.maxlag / args.dt)
+                         #     fp.attrs[key] = nlag
+                         # else:
                          fp.attrs[key] = value
                      else:
                          print(f"Skipping key {key}: unsupported data type {type(value)}")
