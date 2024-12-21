@@ -318,12 +318,12 @@ class CCIterableDataset(IterableDataset):
                             config=self.config,
                         )
                         data = torch.tensor(data, dtype=self.dtype).to(self.device)
-                        if self.data_format1 == "h5"
+                        if self.data_format1 == "h5":
                             data = data.float().unsqueeze(0).unsqueeze(0)
                         if self.transforms is not None:
                             data = self.transforms(data)
 
-                        print('data shape '+str(data.shape))
+                        #print('data shape '+str(data.shape))
                         meta1 = {
                             "data": data,
                             "index": ii,
@@ -368,7 +368,7 @@ class CCIterableDataset(IterableDataset):
                             config=self.config,
                         )
                         data = torch.tensor(data, dtype=self.dtype).to(self.device)
-                        if self.data_format2 == "h5"
+                        if self.data_format2 == "h5":
                             data = data.float().unsqueeze(0).unsqueeze(0)
                         if self.transforms is not None:
                             data = self.transforms(data)
