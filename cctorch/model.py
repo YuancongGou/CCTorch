@@ -76,6 +76,7 @@ class CCModel(nn.Module):
                 xcor_freq = data1 * torch.conj(data2)
             xcor_time = torch.fft.irfft(xcor_freq, n=nfast, dim=-1)
             xcor = torch.roll(xcor_time, nfast // 2, dims=-1)[..., nfast // 2 - self.nlag : nfast // 2 + self.nlag + 1]
+            nlag = self.nlag
 
         elif self.domain == "time":
             ## using conv1d in time domain
@@ -133,6 +134,7 @@ class CCModel(nn.Module):
             data1 = data1.view(nb1 * nc1 * nx1, nt1)
             # data2 = data2.view(nb2 * nc2 * nx2, nt2)
             data2 = data2.view(nb1 * nc1 * nx1, nt1)
+            
             if not self.pre_fft:
                 data1 = torch.stft(
                     data1,
@@ -158,6 +160,7 @@ class CCModel(nn.Module):
                 data2 = torch.exp(1j * data2.angle())
 
             xcor = torch.fft.irfft(torch.sum(data1 * torch.conj(data2), dim=-1), dim=-1)
+            #print('xcor shape ' + str(xcor.shape))
             xcor = torch.roll(xcor, self.nlag, dims=-1)
             xcor = xcor.view(nb1, nc1, nx1, -1)
 

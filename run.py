@@ -20,6 +20,13 @@ from cctorch import CCDataset, CCIterableDataset, CCModel
 from cctorch.transforms import *
 from cctorch.utils import write_ambient_noise
 
+import warnings
+
+warnings.filterwarnings(
+    "ignore",
+    category=UserWarning,
+    message="Failed to load image Python extension: .*"
+)
 
 def get_args_parser(add_help=True):
     import argparse
@@ -164,7 +171,7 @@ def main(args):
         ### preprocessing for ambient noise
         transform_on_file = True
         transform_on_batch = False
-        transform_device = "cpu"
+        transform_device = "cuda"
         window_size = 64
         #### bandpass filter
         fmin = 0.1
@@ -174,6 +181,7 @@ def main(args):
         order = 2
         #### Decimate
         decimate_factor = 2
+        nlag = nlag // decimate_factor
 
         ## cross-correlation
         nma = (20, 0)
@@ -234,7 +242,8 @@ def main(args):
         ## TODO add preprocess for ambient noise
         if args.temporal_gradient:  ## convert to strain rate
             preprocess.append(TemporalGradient(ccconfig.fs))
-        preprocess.append(TemporalMovingNormalization(int(ccconfig.maxlag * ccconfig.fs)))  # 30s for 25Hz
+        # preprocess.append(TemporalMovingNormalization(int(ccconfig.maxlag * ccconfig.fs)))  # 30s for 25Hz
+    
         preprocess.append(
             Filtering(
                 ccconfig.fmin,
