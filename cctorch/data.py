@@ -486,6 +486,7 @@ def read_data(file_name, data_path, format="h5", mode="CC", config={}):
 
     elif mode == "AN":
         if format == "h5":
+            print(file_name)
             data, info = read_das_continuous_data_h5(data_path / file_name, dataset_keys=[])
 
     elif mode == "TM":
@@ -655,6 +656,8 @@ def read_das_continuous_data_h5(fn, dataset_keys=[]):
             data = f["Data"][:]
         elif "data" in f:
             data = f["data"][:]
+        elif "Acquisition" in f:  #### SeaFOAM, 1-min raw data
+            data = f['Acquisition']['Raw[0]']['RawData'][:].T
         else:
             raise ValueError("Cannot find data in the file")
         info = {}

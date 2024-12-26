@@ -9,38 +9,58 @@ import pandas as pd
 root_path = "tests"
 data_path = "data"
 
-# %%
-# wget to data_path https://github.com/AI4EPS/CCTorch/releases/download/test_ambient_noise/Ridgecrest_ODH3-2021-06-15.183838Z.h5
-file_path = f"{root_path}/{data_path}/Ridgecrest_ODH3-2021-06-15.183838Z.h5"
-if not os.path.exists(file_path):
-    os.system(
-        f"wget -P {root_path}/{data_path} https://github.com/AI4EPS/CCTorch/releases/download/test_ambient_noise/Ridgecrest_ODH3-2021-06-15.183838Z.h5"
-    )
+#root_path = '/home/gcl/RA/yuancong_gou/CCTorch/SeaFOAM/data/event'
+root_path = '/home/gcl/RA/yuancong_gou/CCTorch/SeaFOAM/data/event/eq_M4_plus'
+#data_path = 'eq_M4_plus'
+data_path = 'nc75068161'
+
+root_path = '/ref/das-mbari_1'
+data_path = '2022/2022.360'
 
 # %%
-files = glob.glob(f"{root_path}/{data_path}/*.h5")
+# wget to data_path https://github.com/AI4EPS/CCTorch/releases/download/test_ambient_noise/Ridgecrest_ODH3-2021-06-15.183838Z.h5
+#file_path = f"{root_path}/{data_path}/Ridgecrest_ODH3-2021-06-15.183838Z.h5"
+# if not os.path.exists(file_path):
+#     # os.system(
+#     #     f"wget -P {root_path}/{data_path} https://github.com/AI4EPS/CCTorch/releases/download/test_ambient_noise/Ridgecrest_ODH3-2021-06-15.183838Z.h5"
+#     # )
+
+# %%
+files = sorted(glob.glob(f"{root_path}/{data_path}/*.h5"))
 
 # %%
 pair_list = []
 data_list = []
 
 # %%
-for file in files:
-    with h5py.File(file, "r") as f:
-        nx, nt = f["Data"].shape
-        for i in range(nx):
-            data_list.append([f"{file}", i])
+# for file in files[0:60]:
+    
+#     with h5py.File(file, "r") as f:
+#         nx, nt = f['Acquisition']['Raw[0]']['RawData'][:].T.shape
+#         for i in range(nx):
+#             data_list.append([f"{file}", i])
+
+
+for file in files[0:120]:
+
+    for i in range(6000,6000+1024):
+    
+        data_list.append([f"{file}", i])
 
 data_list = pd.DataFrame(data_list, columns=["file_name", "channel_index"])
 data_list.to_csv("data_list.txt", index=False)
 
 # %%
-select_chn = 500
+select_chn = 6511
 ii = data_list[data_list["channel_index"] == select_chn].index[0]
 pair_list = []
 for ij, row in data_list.iterrows():
-    if row["channel_index"] != select_chn:
-        pair_list.append(f"{ii},{ij}")
+    #if row["channel_index"] != select_chn:
+    #   pair_list.append(f"{ii},{ij}")
+    sc = ii + (ij // 1024) *1024
+    pair_list.append(f"{sc},{ij}")
+
+        
 
 # %%
 with open("pair_list.txt", "w") as f:

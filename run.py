@@ -21,6 +21,7 @@ from cctorch.transforms import *
 from cctorch.utils import write_ambient_noise
 
 import warnings
+from time import time
 
 warnings.filterwarnings(
     "ignore",
@@ -174,13 +175,13 @@ def main(args):
         transform_device = "cuda"
         window_size = 64
         #### bandpass filter
-        fmin = 0.1
+        fmin = 0.5
         fmax = 10
         ftype = "bandpass"
         alpha = 0.05  # tukey window parameter
         order = 2
         #### Decimate
-        decimate_factor = 2
+        decimate_factor = 8
         nlag = nlag // decimate_factor
 
         ## cross-correlation
@@ -256,8 +257,9 @@ def main(args):
             )
         )  # 50Hz # not working on M1
         preprocess.append(Decimation(ccconfig.decimate_factor))  # 25Hz
-        preprocess.append(T.Lambda(remove_spatial_median))
+        #preprocess.append(T.Lambda(remove_spatial_median))
         preprocess.append(TemporalMovingNormalization(int(2 * ccconfig.fs // ccconfig.decimate_factor)))  # 2s for 25Hz
+        preprocess.append(T.Lambda(remove_spatial_median))
 
     preprocess = T.Compose(preprocess)
 
@@ -559,6 +561,30 @@ def main(args):
         events_df.sort_values(by="event_time", inplace=True)
         picks_df.to_csv(os.path.join(args.result_path, f"{ccconfig.mode}_{world_size:03d}_pick.csv"), index=False)
         events_df.to_csv(os.path.join(args.result_path, f"{ccconfig.mode}_{world_size:03d}_event.csv"), index=False)
+
+
+    # if args.mode == "AN":
+
+    #     result_df = []
+    #     for i, data in enumerate(tqdm(dataloader, position=rank, desc=f"{rank}/{world_size}: computing")):
+
+    #         if args.dataset_type == 'iterable':
+    #            #t1 = time() 
+    #            #if i!=0:
+    #            #   print(str(i)+' dataloader time : ' + str(t1-t2))
+    #            result = ccmodel(data) 
+    #            #t2 = time()
+    #            #print('model time : ' + str(time()-t1))
+
+    #         if args.dataset_type == 'map':
+    #            result = ccmodel.forward_map(data)
+        
+    #         #print(type(result))
+    #         #t3 = time()    
+    #         with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_block_{i:02d}.h5"), "w") as fp:
+    #              write_ambient_noise([result], fp, ccconfig)
+    #              #print('Writing : '+f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_block_{i:02d}.h5")
+                
 
     if args.mode == "AN":
         MAX_THREADS = 32
