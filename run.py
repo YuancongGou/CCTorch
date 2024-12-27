@@ -22,7 +22,7 @@ import torchvision.transforms as T
 import utils
 from cctorch import CCDataset, CCIterableDataset, CCModel
 from cctorch.transforms import *
-from cctorch.utils import write_cc_pairs, write_tm_detects
+from cctorch.utils import write_cc_pairs, write_tm_detects,write_ambient_noise
 from sklearn.cluster import DBSCAN
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -177,7 +177,7 @@ def main(args):
         ### preprocessing for ambient noise
         transform_on_file = True
         transform_on_batch = False
-        transform_device = "cpu"
+        transform_device = "cuda"
         window_size = 64
         #### bandpass filter
         fmin = 0.5
@@ -187,6 +187,7 @@ def main(args):
         order = 2
         #### Decimate
         decimate_factor = 8
+        nlag = nlag // decimate_factor
 
         ## cross-correlation
         nma = (20, 0)
@@ -284,7 +285,7 @@ def main(args):
         #     )
         # )  # 50Hz
         # preprocess.append(Decimation(ccconfig.decimate_factor))  # 25Hz
-        #preprocess.append(T.Lambda(remove_spatial_median))
+        # preprocess.append(T.Lambda(remove_spatial_median))
         # preprocess.append(TemporalMovingNormalization(int(2 * ccconfig.fs // ccconfig.decimate_factor)))  # 2s for 25Hz
 
     preprocess = T.Compose(preprocess)
@@ -365,8 +366,8 @@ def main(args):
     dataloader = DataLoader(
         dataset,
         batch_size=None,
-        #num_workers=args.workers if (args.dataset_type == "map") else 0,
-        num_workers=args.workers,
+        num_workers=args.workers if (args.dataset_type == "map") else 0,
+        #num_workers=args.workers,
         sampler=sampler if args.dataset_type == "map" else None,
         pin_memory=False,
         #prefetch_factor=2,
@@ -389,15 +390,15 @@ def main(args):
         to_device=False,  ## to_device is done in dataset in default
         device=args.device,
         transforms=postprocess,
-        temporal_gradient_params=temporal_gradient_params,
-        filtering_params=filtering_params,
-        decimation_params=decimation_params,
-        temporal_norm_params=temporal_norm_params,
+        # temporal_gradient_params=temporal_gradient_params,
+        # filtering_params=filtering_params,
+        # decimation_params=decimation_params,
+        # temporal_norm_params=temporal_norm_params,
     )
     
-    #ccmodel.to(args.device)
+    ccmodel.to(args.device)
 
-    ccmodel.to(rank)  # Use the local rank (GPU ID)
+    #ccmodel.to(rank)  # Use the local rank (GPU ID)
     # if args.distributed:
     #     ccmodel = torch.nn.parallel.DistributedDataParallel(ccmodel, device_ids=[rank])
 
@@ -643,9 +644,10 @@ def main(args):
             
             if args.dataset_type == 'map':
                result = ccmodel.forward_map(data)
+
         
             #print(type(result))
-            #t3 = time()    
+            t3 = time()    
             with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_block_{i:02d}.h5"), "w") as fp:
                  # Store each key-value pair
                  for key, value in result.items():
@@ -667,27 +669,22 @@ def main(args):
                          fp.attrs[key] = value
                      else:
                          print(f"Skipping key {key}: unsupported data type {type(value)}")
-            #t4 = time()
-            #print(str(i)+' write h5 time : ' + str(t4-t3))
+            t4 = time()
+            print(str(i)+' write h5 time : ' + str(t4-t3))
 
-    # MAX_THREADS = 32
-    # with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}.h5"), "w") as fp:
-    #     with ThreadPoolExecutor(max_workers=16) as executor:
-    #         futures = set()
-    #         lock = threading.Lock()
-    #         for data in tqdm(dataloader, position=rank, desc=f"{args.mode}: {rank}/{world_size}"):
-    #             result = ccmodel(data)
-    #             if args.mode == "CC":
-    #                 thread = executor.submit(write_cc_pairs, [result], fp, ccconfig, lock)
+    # if args.mode == "AN":
+    #     MAX_THREADS = 32
+    #     with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}.h5"), "w") as fp:
+    #         with ThreadPoolExecutor(max_workers=16) as executor:
+    #             futures = set()
+    #             lock = threading.Lock()
+    #             for data in tqdm(dataloader, position=rank, desc=f"{args.mode}: {rank}/{world_size}"):
+    #                 result = ccmodel(data)
+    #                 thread = executor.submit(write_ambient_noise, [result], fp, ccconfig, lock)
     #                 futures.add(thread)
-    #                 # write_cc_pairs([result], fp, ccconfig, lock)
-    #             if args.mode == "TM":
-    #                 thread = executor.submit(write_tm_detects, [result], fp, ccconfig, lock)
-    #                 futures.add(thread)
-    #                 # write_tm_detects([result], fp, ccconfig, lock)
-    #             if len(futures) >= MAX_THREADS:
-    #                 done, futures = wait(futures, return_when=FIRST_COMPLETED)
-    #         executor.shutdown(wait=True)
+    #                 if len(futures) >= MAX_THREADS:
+    #                     done, futures = wait(futures, return_when=FIRST_COMPLETED)
+    #             executor.shutdown(wait=True)
 
 
 if __name__ == "__main__":

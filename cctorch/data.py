@@ -906,7 +906,7 @@ def read_mseed_3c(fname, response=None, highpass_filter=0.0, sampling_rate=100, 
 
 
 def read_das_continuous_data_h5(fn, dataset_keys=[]):
-    #print(fn)
+    #print('reading : '+str(fn))
     with h5py.File(fn, "r") as f:
         if "Data" in f:
             data = f["Data"][:]

@@ -22,7 +22,7 @@ class CCModel(nn.Module):
     ):
         super(CCModel, self).__init__()
         self.dt = config.dt
-        self.nlag = config.nlag
+        #self.nlag = config.nlag
         self.nma = config.nma
         self.channel_shift = config.channel_shift
 
@@ -33,11 +33,17 @@ class CCModel(nn.Module):
         self.mccc = config.mccc
         self.use_pair_index = config.use_pair_index
         self.pre_fft = config.pre_fft
-        self.spectral_whitening = config.spectral_whitening
+        #self.spectral_whitening = config.spectral_whitening
         self.transforms = transforms
         self.batch_size = batch_size
         self.to_device = to_device
         self.device = device
+
+        # AN
+        self.nlag = config.nlag
+        self.nfft = self.nlag * 2
+        self.window = torch.hann_window(self.nfft, periodic=False).to(self.device)
+        self.spectral_whitening = config.spectral_whitening
         
         # Initialize filtering if parameters are provided
         if filtering_params:
@@ -108,8 +114,8 @@ class CCModel(nn.Module):
             data1 = self.temporal_norm(data1)
             data2 = self.temporal_norm(data2)
 
-        #data1 = remove_spatial_median(data1)
-        #data2 = remove_spatial_median(data2)
+        data1 = remove_spatial_median(data1)
+        data2 = remove_spatial_median(data2)
 
         #print('Domain : ' + self.domain)
         if self.domain == "frequency":
@@ -178,14 +184,15 @@ class CCModel(nn.Module):
                 xcor = torch.mean(xcor, dim=(-3), keepdim=True)
 
         elif self.domain == "stft":
+            nlag = self.nlag
             nb1, nc1, nx1, nt1 = data1.shape
             # nb2, nc2, nx2, nt2 = data2.shape
             data1 = data1.view(nb1 * nc1 * nx1, nt1)
             # data2 = data2.view(nb2 * nc2 * nx2, nt2)
             data2 = data2.view(nb1 * nc1 * nx1, nt1)
             if not self.pre_fft:
-                data1 = torch.stft(data1, n_fft=self.nlag * 2, hop_length=self.nlag, center=True, return_complex=True)
-                data2 = torch.stft(data2, n_fft=self.nlag * 2, hop_length=self.nlag, center=True, return_complex=True)
+                data1 = torch.stft(data1, n_fft=self.nlag * 2, hop_length=self.nlag, center=True, return_complex=True,window=self.window)
+                data2 = torch.stft(data2, n_fft=self.nlag * 2, hop_length=self.nlag, center=True, return_complex=True,window=self.window)
             if self.spectral_whitening:
                 # freqs = np.fft.fftfreq(self.nlag*2, d=self.dt)
                 # data1 = data1 / torch.clip(torch.abs(data1), min=1e-7) #float32 eps
@@ -196,7 +203,7 @@ class CCModel(nn.Module):
             xcor = torch.fft.irfft(torch.sum(data1 * torch.conj(data2), dim=-1), dim=-1)
             xcor = torch.roll(xcor, self.nlag, dims=-1)
             xcor = xcor.view(nb1, nc1, nx1, -1)
-            nlag = self.nlag
+            #nlag = self.nlag
 
         else:
             raise ValueError("domain should be frequency or time or stft")

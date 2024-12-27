@@ -302,6 +302,28 @@ def write_ambient_noise(results, result_path, ccconfig, rank=0, world_size=1):
                             ds[:] = count / (count + 1) * ds[:] + np.flip(data[..., j, :], axis=-1) / (count + 1)
                             ds.attrs["count"] = count + 1
 
+# def write_ambient_noise(results, fp, ccconfig, lock=nullcontext(), plot_figure=False):
+#     """
+#     Write ambient noise results to disk.
+#     """
+#     for meta in results:
+#         xcorr = meta["xcorr"].cpu().numpy()
+#         nb, nch, nx, nt = xcorr.shape
+#         for i in range(nb):
+#             data = np.squeeze(np.nan_to_num(xcorr[i, :, :, :]))
+#             id1, id2 = meta["pair_index"][i]
+
+#             if f"{id1}/{id2}" not in fp:
+#                 gp = fp.create_group(f"{id1}/{id2}")
+#                 ds = gp.create_dataset("xcorr", data=data)
+#                 ds.attrs["count"] = 1
+#             else:
+#                 gp = fp[f"{id1}/{id2}"]
+#                 ds = gp["xcorr"]
+#                 count = ds.attrs["count"]
+#                 ds[:] = count / (count + 1) * ds[:] + data / (count + 1)
+#                 ds.attrs["count"] = count + 1
+
 
 def write_xcor_data_to_h5(result, path_result, phase1="P", phase2="P"):
     """
