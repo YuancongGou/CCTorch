@@ -17,6 +17,8 @@ from scipy.sparse import coo_matrix
 from torch.utils.data import Dataset, IterableDataset
 from tqdm import tqdm
 
+from concurrent.futures import ThreadPoolExecutor
+
 
 class CCDataset(Dataset):
     def __init__(
@@ -190,7 +192,7 @@ class CCIterableDataset(IterableDataset):
         self.block_index, self.num_batch = self.count_blocks(blocks)
 
         print(
-            f"pair_matrix: {self.pair_matrix.shape}, blocks: {len(self.block_index)}, block_size: {self.block_size1} x {self.block_size2}"
+            f"num_batch: {self.self.num_batch}, pair_matrix: {self.pair_matrix.shape}, blocks: {len(self.block_index)}, block_size: {self.block_size1} x {self.block_size2}"
         )
 
         if (self.data_format1 == "memmap") or (self.data_format2 == "memmap"):
@@ -248,17 +250,40 @@ class CCIterableDataset(IterableDataset):
 
         return pair_matrix, row_index, col_index, unique_row, unique_col
 
+    # def count_blocks(self, blocks):
+    #     num_batch = 0
+    #     non_empty = []
+    #     for i, j in tqdm(blocks, desc="Counting batch"):
+    #         index1, index2 = self.group1[i], self.group2[j]
+    #         count = (self.pair_matrix[index1, :][:, index2]).sum()
+    #         if count > 0:
+    #             non_empty.append((i, j))
+    #             num_batch += (count - 1) // self.batch_size + 1
+
+    #     return non_empty, num_batch
+
+    def process_block(self, block):
+        i, j = block
+        index1, index2 = self.group1[i], self.group2[j]
+        count = (self.pair_matrix[index1, :][:, index2]).sum()
+        if count > 0:
+            return (i, j), (count - 1) // self.batch_size + 1
+        return None, 0
+    
     def count_blocks(self, blocks):
         num_batch = 0
         non_empty = []
-        for i, j in tqdm(blocks, desc="Counting batch"):
-            index1, index2 = self.group1[i], self.group2[j]
-            count = (self.pair_matrix[index1, :][:, index2]).sum()
-            if count > 0:
-                non_empty.append((i, j))
-                num_batch += (count - 1) // self.batch_size + 1
-
+    
+        with ThreadPoolExecutor(max_workers=16) as executor:
+            results = list(tqdm(executor.map(self.process_block, blocks), total=len(blocks), desc="Counting batch"))
+    
+        for result, batch_count in results:
+            if result:
+                non_empty.append(result)
+                num_batch += batch_count
+    
         return non_empty, num_batch
+
 
     def __len__(self):
         return self.num_batch

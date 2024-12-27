@@ -40,48 +40,61 @@ if __name__ == "__main__":
 
     tmp = []
     for ch1 in args.fixed_channels:
-        data = []
-        index = []
-        for h5_file in h5_files:
-            with h5py.File(h5_file, "r") as fp:
-                ch2 = sorted([int(x) for x in fp[f"/{ch1}"].keys()])
-                for c in ch2:
-                    data.append(fp[f"/{ch1}/{c}"]["xcorr"][:])
-                    index.append(c)
 
-        # index = np.array(index)
-        # data = np.stack(data)
-        # sorted_idx = np.argsort(index)
-        # index = index[sorted_idx]
-        # data = data[sorted_idx]
-
-        # # Reshape to group every 5 columns together
-        # #reshaped_data = data.reshape(10244, 5, 800)
-        # reshaped_data = data.reshape(10244, 60, 25*60)
-        # # Compute the mean along the last axis (stack every 5 columns)
-        # data = reshaped_data.mean(axis=1)
-
-        # Group arrays by their indices
-        grouped_data = {}
-        for arr, idx in zip(data, index):
-            if idx not in grouped_data:
-                grouped_data[idx] = []
-            grouped_data[idx].append(arr)
-
-        # Stack the arrays for each index
-        stacked_data = {idx: np.stack(arr_list) for idx, arr_list in grouped_data.items()}
-
-        data_list = []
-        for idx, stacked_array in stacked_data.items():
-            data_list.append(np.mean(stacked_array,0))
-
-        data = np.stack(data_list)
-
+        if not Path(figure_path / f"result_{ch1}.npz").exists():
             
-        #np.savez(figure_path / f"result_{ch1}.npz", data=data, index=index)
+           data = []
+           index = []
+           for h5_file in h5_files:
+               with h5py.File(h5_file, "r") as fp:
+                   ch2 = sorted([int(x) for x in fp[f"/{ch1}"].keys()])
+                   for c in ch2:
+                       data.append(fp[f"/{ch1}/{c}"]["xcorr"][:])
+                       index.append(c)
+   
+           # index = np.array(index)
+           # data = np.stack(data)
+           # sorted_idx = np.argsort(index)
+           # index = index[sorted_idx]
+           # data = data[sorted_idx]
+
+        
+
+
+           # Group arrays by their indices
+           grouped_data = {}
+           for arr, idx in zip(data, index):
+               if idx not in grouped_data:
+                   grouped_data[idx] = []
+               grouped_data[idx].append(arr)
+   
+           # Stack the arrays for each index
+           stacked_data = {idx: np.stack(arr_list) for idx, arr_list in grouped_data.items()}
+   
+           data_list = []
+           index_list = []
+           for idx, stacked_array in stacked_data.items():
+               data_list.append(np.mean(stacked_array,0))
+               index_list.append(idx)
+   
+           data = np.stack(data_list)
+           index = np.array(index_list)
+   
+               
+           np.savez(figure_path / f"result_{ch1}.npz", data=data, index=index)
+           
+
+        else:
+           print(str(Path(figure_path / f"result_{ch1}.npz"))+' found.')
+           data = np.load(figure_path / f"result_{ch1}.npz")
+           data = data['data']
+
+        ch1 = int(ch1)
         plt.figure()
+        #vmax = np.std(data[ch1-512:ch1+512,:])
         vmax = np.std(data)
-        plt.imshow(data, vmin=-vmax, vmax=vmax, aspect="auto",
+        #plt.imshow(data[ch1-512:ch1+512,:], vmin=-vmax, vmax=vmax, aspect="auto",
+        plt.imshow(data[:,:], vmin=-vmax, vmax=vmax, aspect="auto",
                    #cmap="seismic")
                    cmap="RdBu")
         plt.colorbar()

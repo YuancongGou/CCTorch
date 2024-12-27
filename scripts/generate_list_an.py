@@ -41,9 +41,10 @@ data_list = []
 #             data_list.append([f"{file}", i])
 
 
-for file in files[0:120]:
+for file in files[0:]:
 
-    for i in range(6000,6000+1024):
+    #for i in range(0,10240):
+    for i in range(576,2624):
     
         data_list.append([f"{file}", i])
 
@@ -51,13 +52,14 @@ data_list = pd.DataFrame(data_list, columns=["file_name", "channel_index"])
 data_list.to_csv("data_list.txt", index=False)
 
 # %%
-select_chn = 6511
+select_chn = 1600-1
 ii = data_list[data_list["channel_index"] == select_chn].index[0]
 pair_list = []
 for ij, row in data_list.iterrows():
     #if row["channel_index"] != select_chn:
     #   pair_list.append(f"{ii},{ij}")
-    sc = ii + (ij // 1024) *1024
+    #sc = ii + (ij // 10240) *10240
+    sc = ii + (ij // 2048) * 2048
     pair_list.append(f"{sc},{ij}")
 
         
