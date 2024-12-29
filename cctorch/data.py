@@ -627,9 +627,10 @@ class CCIterableDataset(IterableDataset):
                         continue
                     index_i.append(ii)
                     index_j.append(jj)
-
+                #print(data)
                 data_i = data[:, :, index_i, :].to(self.device)
                 data_j = data[:, :, index_j, :].to(self.device)
+                #print(data_i)
 
                 if (self.config.transform_on_batch) and (self.transforms is not None):
                     data_i = self.transforms(data_i)
@@ -978,3 +979,150 @@ def read_das_eventphase_data_h5(fn, phase=None, event=False, dataset_keys=None, 
             event_dict = dict((key, fid["data"].attrs[key]) for key in fid["data"].attrs.keys())
             info_list[0]["event"] = event_dict
     return data_list, info_list
+
+
+
+################################################ test #############################################
+
+class CCMapDataset(torch.utils.data.Dataset):
+    def __init__(
+        self,
+        config=None,
+        pair_list=None,
+        data_list1=None,
+        data_list2=None,
+        data_path1="./",
+        data_path2="./",
+        data_format1="h5",
+        data_format2="h5",
+        block_size1=1,
+        block_size2=1,
+        dtype=torch.float32,
+        device="cpu",
+        transforms=None,
+        rank=0,
+        world_size=1,
+        **kwargs,
+    ):
+        super().__init__()
+
+        self.mode = config.mode
+        self.config = config
+        self.block_size1 = block_size1
+        self.block_size2 = block_size2
+        self.data_path1 = Path(data_path1)
+        self.data_path2 = Path(data_path2)
+        self.data_format1 = data_format1
+        self.data_format2 = data_format2
+        self.transforms = transforms
+        self.device = device
+        self.dtype = dtype
+
+        # Load data_list1
+        if data_list1 is not None:
+            if data_list1.endswith(".txt"):
+                with open(data_list1, "r") as fp:
+                    self.data_list1 = fp.read().splitlines()
+            else:
+                self.data_list1 = pd.read_csv(data_list1).set_index("idx_pick").index.tolist()
+        else:
+            self.data_list1 = []
+
+        # Split data across workers if using distributed training
+        self.data_list1 = self.data_list1[rank::world_size]
+
+    def __len__(self):
+        return len(self.data_list1)
+
+    def __getitem__(self, index):
+        # Get the file path for the given index
+        file_name = self.data_list1[index]
+
+        # Read the data
+        meta = read_data(file_name, self.data_path1, self.data_format1, mode=self.mode)  # (nch, nt)
+        data = meta["data"].float().unsqueeze(0).unsqueeze(0)  # (1, 1, nx, nt)
+
+        if (self.config.transform_on_file) and (self.transforms is not None):
+            data = self.transforms(data)
+
+        nb, nc, nx, nt = data.shape
+
+        # Cut blocks
+        min_channel = self.config.min_channel if self.config.min_channel is not None else 0
+        max_channel = self.config.max_channel if self.config.max_channel is not None else nx
+        left_channel = self.config.left_channel if self.config.left_channel is not None else -nx
+        right_channel = self.config.right_channel if self.config.right_channel is not None else nx
+
+        if self.config.fixed_channels is not None:
+            lists_1 = (
+                self.config.fixed_channels
+                if isinstance(self.config.fixed_channels, list)
+                else [self.fixed_channels]
+            )
+        else:
+            lists_1 = range(min_channel, max_channel, self.config.delta_channel)
+        lists_2 = range(min_channel, max_channel, self.config.delta_channel)
+
+        block_num1 = int(np.ceil(len(lists_1) / self.block_size1))
+        block_num2 = int(np.ceil(len(lists_2) / self.block_size2))
+        group_1 = [list(x) for x in np.array_split(lists_1, block_num1) if len(x) > 0]
+        group_2 = [list(x) for x in np.array_split(lists_2, block_num2) if len(x) > 0]
+        block_index = list(itertools.product(range(len(group_1)), range(len(group_2))))
+
+        data_blocks = []
+        # Loop through each block
+        for i, j in block_index:
+            block1 = group_1[i]
+            block2 = group_2[j]
+            index_i = []
+            index_j = []
+            for ii, jj in itertools.product(block1, block2):
+                if (jj < (ii + left_channel)) or (jj > (ii + right_channel)):
+                    continue
+                index_i.append(ii)
+                index_j.append(jj)
+
+            data_i = data[:, :, index_i, :].to(self.device)
+            data_j = data[:, :, index_j, :].to(self.device)
+
+            if (self.config.transform_on_batch) and (self.transforms is not None):
+                data_i = self.transforms(data_i)
+                data_j = self.transforms(data_j)
+
+            data_blocks.append(({
+                "data": data_i,
+                "index": [index_i],
+                "info": {},
+            },{ "data": data_j, "index": [index_j], "info": {}}))
+
+        return data_blocks
+
+
+    def read_data(file_name, data_path, format="h5", mode="CC", config={}):
+    
+        if mode == "AN":
+            if format == "h5":
+                data, info = read_das_continuous_data_h5(data_path / file_name, dataset_keys=[])
+    
+        else:
+            raise ValueError(f"Unknown mode: {mode}")
+    
+        return {"data": data, "info": info}
+    
+    
+    
+    def read_das_continuous_data_h5(fn, dataset_keys=[]):
+        #print('reading : '+str(fn))
+        with h5py.File(fn, "r") as f:
+            if "Data" in f:
+                data = f["Data"][:]
+            elif "data" in f:
+                data = f["data"][:]
+            elif "Acquisition" in f:  #### SeaFOAM, temporal 
+                data = f['Acquisition']['Raw[0]']['RawData'][:].T
+            else:
+                raise ValueError("Cannot find data in the file")
+            info = {}
+            for key in dataset_keys:
+                info[key] = f[key][:]
+        return torch.tensor(data), info

@@ -85,14 +85,20 @@ class CCModel(nn.Module):
                     - data (torch.Tensor): data2 with shape (batch, nsta/nch, nt)
                     - info (dict): information information of data2
         """
-
-        x1, x2 = x
+        # print(type(x))
+        # print(len(x))
+        # print(type(x[0]))
+        # print(x[0])
+        x1, x2 = x[0]
+        #x1, x2 = x
         if self.to_device:
             data1 = x1["data"].to(self.device)
             data2 = x2["data"].to(self.device)
         else:
             data1 = x1["data"]
             data2 = x2["data"]
+
+        #print(data1)
 
         # Apply temporal gradient if enabled
         if self.temp_gradient:
@@ -114,8 +120,11 @@ class CCModel(nn.Module):
             data1 = self.temporal_norm(data1)
             data2 = self.temporal_norm(data2)
 
-        data1 = remove_spatial_median(data1)
+        ### data1 is the array with virture source channels so can not remove_spatial_median
         data2 = remove_spatial_median(data2)
+
+        #print(data1)
+        #print(data2)
 
         #print('Domain : ' + self.domain)
         if self.domain == "frequency":

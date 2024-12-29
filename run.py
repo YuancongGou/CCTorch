@@ -28,6 +28,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from time import time
 
+from cctorch import CCMapDataset
+
 # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 # os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
@@ -132,6 +134,108 @@ def get_args_parser(add_help=True):
     #parser.add_argument("--distributed", action="store_true", help="Enable distributed training across multiple GPUs")
     return parser
 
+from dataclasses import dataclass
+import torch
+
+@dataclass
+class CCConfig:
+    mode: str
+    domain: str
+    dtype: torch.dtype
+    device: str
+    dt: float
+    fs: float
+    sampling_rate: float
+    maxlag: float
+    nlag: int
+    pre_fft: bool
+    auto_xcorr: bool
+    spectral_whitening: bool
+    max_channel: int
+    min_channel: int
+    delta_channel: int
+    left_channel: int
+    right_channel: int
+    fixed_channels: bool
+    transform_on_file: bool
+    transform_on_batch: bool
+    transform_device: str
+    window_size: int
+    fmin: float
+    fmax: float
+    ftype: str
+    alpha: float
+    order: int
+    decimate_factor: int
+    nma: tuple
+    reduce_t: bool
+    reduce_x: bool
+    reduce_c: bool
+    channel_shift: bool
+    mccc: bool
+    use_pair_index: bool
+    min_cc: float
+    max_shift: dict
+    max_obs: int
+    min_obs: int
+    shift_t: bool
+    normalize: bool
+
+    def __init__(self, args, config=None):
+        # Initialize from args
+        self.mode = args.mode
+        self.domain = args.domain
+        self.dtype = torch.float32 if args.dtype == "float32" else torch.float64
+        self.device = args.device
+        self.dt = args.dt
+        self.fs = args.sampling_rate
+        if self.dt != 0.01:
+            self.fs = 1 / self.dt
+        if self.fs != 100:
+            self.dt = 1 / self.fs
+        self.maxlag = args.maxlag
+        self.nlag = int(self.maxlag / self.dt)
+        self.pre_fft = False  # if true, do fft in dataloader
+        self.auto_xcorr = args.auto_xcorr
+        self.spectral_whitening = True
+        self.max_channel = args.max_channel
+        self.min_channel = args.min_channel
+        self.delta_channel = args.delta_channel
+        self.left_channel = args.left_channel
+        self.right_channel = args.right_channel
+        self.fixed_channels = args.fixed_channels
+        self.transform_on_file = True
+        self.transform_on_batch = False
+        self.transform_device = "cuda"
+        self.window_size = 64
+        self.fmin = 0.5
+        self.fmax = 10
+        self.ftype = "bandpass"
+        self.alpha = 0.05  # tukey window parameter
+        self.order = 2
+        self.decimate_factor = 8
+        self.nlag = self.nlag // self.decimate_factor
+        self.nma = (20, 0)
+        self.reduce_t = args.reduce_t
+        self.reduce_x = args.reduce_x
+        self.reduce_c = args.reduce_c
+        self.channel_shift = args.channel_shift
+        self.mccc = args.mccc
+        self.use_pair_index = True if args.dataset_type == "map" else False
+        self.min_cc = 0.5
+        self.max_shift = {"P": int(0.5 * self.fs), "S": int(0.85 * self.fs)}
+        self.max_obs = 100
+        self.min_obs = 8
+        self.shift_t = args.shift_t
+        self.normalize = args.normalize
+
+        # Override with values from config if provided
+        if config is not None:
+            for k, v in config.items():
+                setattr(self, k, v)
+
+def identity_collate(x):
+    return x
 
 
 
@@ -148,73 +252,82 @@ def main(args):
     else:
         config = None
 
-    @dataclass
-    class CCConfig:
-        ## common
-        mode = args.mode
-        domain = args.domain
-        dtype = torch.float32 if args.dtype == "float32" else torch.float64
-        device = args.device
-        dt = args.dt
-        fs = args.sampling_rate
-        if dt != 0.01:
-            fs = 1 / dt
-        if fs != 100:
-            dt = 1 / fs
-        maxlag = args.maxlag
-        nlag = int(maxlag / dt)
-        pre_fft = False  ## if true, do fft in dataloader
-        auto_xcorr = args.auto_xcorr
 
-        ## ambient noise
-        spectral_whitening = True
-        max_channel = args.max_channel
-        min_channel = args.min_channel
-        delta_channel = args.delta_channel
-        left_channel = args.left_channel
-        right_channel = args.right_channel
-        fixed_channels = args.fixed_channels
-        ### preprocessing for ambient noise
-        transform_on_file = True
-        transform_on_batch = False
-        transform_device = "cuda"
-        window_size = 64
-        #### bandpass filter
-        fmin = 0.5
-        fmax = 10
-        ftype = "bandpass"
-        alpha = 0.05  # tukey window parameter
-        order = 2
-        #### Decimate
-        decimate_factor = 8
-        nlag = nlag // decimate_factor
+    ccconfig = CCConfig(args)
+    
 
-        ## cross-correlation
-        nma = (20, 0)
-        reduce_t = args.reduce_t
-        reduce_x = args.reduce_x
-        reduce_c = args.reduce_c
-        channel_shift = args.channel_shift
-        mccc = args.mccc
-        use_pair_index = True if args.dataset_type == "map" else False
-        # filtering
-        min_cc = 0.5
-        max_shift = {"P": int(0.5 * fs), "S": int(0.85 * fs)}
-        max_obs = 100
-        min_obs = 8
+    # @dataclass
+    # class CCConfig:
+    #     ## common
+    #     mode = args.mode
+    #     domain = args.domain
+    #     dtype = torch.float32 if args.dtype == "float32" else torch.float64
+    #     device = args.device
+    #     dt = args.dt
+    #     fs = args.sampling_rate
+    #     if dt != 0.01:
+    #         fs = 1 / dt
+    #     if fs != 100:
+    #         dt = 1 / fs
+    #     maxlag = args.maxlag
+    #     nlag = int(maxlag / dt)
+    #     pre_fft = False  ## if true, do fft in dataloader
+    #     auto_xcorr = args.auto_xcorr
 
-        ## template matching
-        shift_t = args.shift_t
-        reduce_c = args.reduce_c
-        normalize = args.normalize
+    #     ## ambient noise
+    #     spectral_whitening = True
+    #     max_channel = args.max_channel
+    #     min_channel = args.min_channel
+    #     delta_channel = args.delta_channel
+    #     left_channel = args.left_channel
+    #     right_channel = args.right_channel
+    #     fixed_channels = args.fixed_channels
+    #     ### preprocessing for ambient noise
+    #     transform_on_file = True
+    #     transform_on_batch = False
+    #     transform_device = "cuda"
+    #     window_size = 64
+    #     #### bandpass filter
+    #     fmin = 0.5
+    #     fmax = 10
+    #     ftype = "bandpass"
+    #     alpha = 0.05  # tukey window parameter
+    #     order = 2
+    #     #### Decimate
+    #     decimate_factor = 8
+    #     nlag = nlag // decimate_factor
 
-        def __init__(self, config):
-            if config is not None:
-                for k, v in config.items():
-                    setattr(self, k, v)
+    #     ## cross-correlation
+    #     nma = (20, 0)
+    #     reduce_t = args.reduce_t
+    #     reduce_x = args.reduce_x
+    #     reduce_c = args.reduce_c
+    #     channel_shift = args.channel_shift
+    #     mccc = args.mccc
+    #     use_pair_index = True if args.dataset_type == "map" else False
+    #     # filtering
+    #     min_cc = 0.5
+    #     max_shift = {"P": int(0.5 * fs), "S": int(0.85 * fs)}
+    #     max_obs = 100
+    #     min_obs = 8
+
+    #     ## template matching
+    #     shift_t = args.shift_t
+    #     reduce_c = args.reduce_c
+    #     normalize = args.normalize
+
+    #     def __init__(self, config):
+    #         if config is not None:
+    #             for k, v in config.items():
+    #                 setattr(self, k, v)
+
+    
     #print(config)
-    ccconfig = CCConfig(config)
+    #ccconfig = CCConfig(config)
     #print(ccconfig.mode)
+
+
+    
     ## Sanity check
     if args.mode == "TM":
         pass
@@ -269,7 +382,7 @@ def main(args):
                             "decimation": ccconfig.decimate_factor,
                             }
         
-        ## TODO add preprocess for ambient noise
+        # TODO add preprocess for ambient noise
         # if args.temporal_gradient:  ## convert to strain rate
         #     preprocess.append(TemporalGradient(ccconfig.fs))
         # preprocess.append(TemporalMovingNormalization(int(30 * ccconfig.fs)))  # 30s for 25Hz
@@ -334,12 +447,30 @@ def main(args):
             data_path2=args.data_path2,
             data_format1=args.data_format1,
             data_format2=args.data_format2,
-            device=args.device,
+            #device=args.device,
+            device='cpu',
             transforms=preprocess,
             batch_size=args.batch_size,
             rank=rank,
             world_size=world_size,
         )
+        # dataset = CCMapDataset(
+        #     config=ccconfig,
+        #     pair_list=args.pair_list,
+        #     data_list1=args.data_list1,
+        #     data_list2=args.data_list2,
+        #     block_size1=args.block_size1,
+        #     block_size2=args.block_size2,
+        #     data_path1=args.data_path1,
+        #     data_path2=args.data_path2,
+        #     data_format1=args.data_format1,
+        #     data_format2=args.data_format2,
+        #     device=args.device,
+        #     transforms=preprocess,
+        #     batch_size=args.batch_size,
+        #     rank=rank,
+        #     world_size=world_size,
+        # )
     else:
         raise ValueError(f"dataset_type {args.dataset_type} not supported")
     # if len(dataset) < world_size:
@@ -363,18 +494,36 @@ def main(args):
     # def collate_fn(batch):
     #     return move_to_device(batch, args.device)
 
+
     dataloader = DataLoader(
         dataset,
-        batch_size=None,
-        num_workers=args.workers if (args.dataset_type == "map") else 0,
+        batch_size=1,
+        num_workers=args.workers if (args.dataset_type == "map") else 4,
         #num_workers=args.workers,
         sampler=sampler if args.dataset_type == "map" else None,
         pin_memory=False,
-        #prefetch_factor=2,
-        collate_fn=lambda x: x,
+        #pin_memory=True,
+        prefetch_factor=2,
+        #collate_fn=lambda x: x,
+        collate_fn=identity_collate,
         #collate_fn=collate_fn,
-        #persistent_workers=True
+        persistent_workers=True
     )
+
+    # dataloader = DataLoader(
+    #     dataset,
+    #     batch_size=1,
+    #     num_workers=4,
+    #     #num_workers=args.workers,
+    #     sampler=sampler,
+    #     pin_memory=False,
+    #     #pin_memory=True,
+    #     #prefetch_factor=2,
+    #     #collate_fn=lambda x: x,
+    #     collate_fn=identity_collate,
+    #     #collate_fn=collate_fn,
+    #     persistent_workers=True
+    # )
     
     # dataloader = DataLoader(
     #     dataset,
@@ -387,13 +536,13 @@ def main(args):
     ccmodel = CCModel(
         config=ccconfig,
         batch_size=args.batch_size,  ## only useful for dataset_type == map
-        to_device=False,  ## to_device is done in dataset in default
+        to_device=True,  ## to_device is done in dataset in default
         device=args.device,
         transforms=postprocess,
-        # temporal_gradient_params=temporal_gradient_params,
-        # filtering_params=filtering_params,
-        # decimation_params=decimation_params,
-        # temporal_norm_params=temporal_norm_params,
+        temporal_gradient_params=temporal_gradient_params,
+        filtering_params=filtering_params,
+        decimation_params=decimation_params,
+        temporal_norm_params=temporal_norm_params,
     )
     
     ccmodel.to(args.device)
@@ -631,12 +780,14 @@ def main(args):
         result_df = []
         for i, data in enumerate(tqdm(dataloader, position=rank, desc=f"{rank}/{world_size}: computing")):
 
+            #print(data[0])
+
             if args.dataset_type == 'iterable':
 
                #data.to(arg.device)
                t1 = time() 
                if i!=0:
-                  print(str(i)+' dataloader time : ' + str(t1-t2))
+                  print(str(i)+' dataloader time : ' + str(t1-t4))
                result = ccmodel(data) 
                t2 = time()
                #print('model time : ' + str(time()-t1))
@@ -670,7 +821,7 @@ def main(args):
                      else:
                          print(f"Skipping key {key}: unsupported data type {type(value)}")
             t4 = time()
-            print(str(i)+' write h5 time : ' + str(t4-t3))
+            #print(str(i)+' write h5 time : ' + str(t4-t3))
 
     # if args.mode == "AN":
     #     MAX_THREADS = 32
@@ -688,9 +839,9 @@ def main(args):
 
 
 if __name__ == "__main__":
-    #import torch.multiprocessing as mp
+    import torch.multiprocessing as mp
     #import multiprocessing as mp
-    #mp.set_start_method('spawn', force=True)
+    mp.set_start_method('spawn', force=True)
     args = get_args_parser().parse_args()
     # if args.distributed:
     #    dist.init_process_group(backend="nccl", init_method=args.dist_url, world_size=args.world_size)
