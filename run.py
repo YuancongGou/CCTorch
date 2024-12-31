@@ -497,17 +497,17 @@ def main(args):
 
     dataloader = DataLoader(
         dataset,
-        batch_size=1,
-        num_workers=args.workers if (args.dataset_type == "map") else 4,
+        batch_size=None,
+        num_workers=args.workers if (args.dataset_type == "map") else 0,
         #num_workers=args.workers,
         sampler=sampler if args.dataset_type == "map" else None,
         pin_memory=False,
         #pin_memory=True,
-        prefetch_factor=2,
+        #prefetch_factor=2,
         #collate_fn=lambda x: x,
         collate_fn=identity_collate,
         #collate_fn=collate_fn,
-        persistent_workers=True
+        #persistent_workers=True
     )
 
     # dataloader = DataLoader(

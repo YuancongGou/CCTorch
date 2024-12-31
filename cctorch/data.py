@@ -17,6 +17,8 @@ from scipy.sparse import coo_matrix
 from torch.utils.data import Dataset, IterableDataset
 from tqdm import tqdm
 
+from time import time
+
 
 class CCDataset(Dataset):
     def __init__(
@@ -608,6 +610,7 @@ class CCIterableDataset(IterableDataset):
                 ## using delta_channel to down-sample channels needed for ambient noise
                 ## using min_channel and max_channel to selected channels that are within a range
                 lists_1 = range(min_channel, max_channel, self.config.delta_channel)
+                
             lists_2 = range(min_channel, max_channel, self.config.delta_channel)
             block_num1 = int(np.ceil(len(lists_1) / self.block_size1))
             block_num2 = int(np.ceil(len(lists_2) / self.block_size2))

@@ -89,7 +89,7 @@ class CCModel(nn.Module):
         # print(len(x))
         # print(type(x[0]))
         # print(x[0])
-        x1, x2 = x[0]
+        x1, x2 = x
         #x1, x2 = x
         if self.to_device:
             data1 = x1["data"].to(self.device)
