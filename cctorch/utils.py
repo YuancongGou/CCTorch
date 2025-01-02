@@ -264,16 +264,18 @@ def write_cc_pairs(results, fp, ccconfig, lock=nullcontext(), plot_figure=False)
     #                         plt.close(fig)
 
 
-def write_ambient_noise(results, result_path, ccconfig, rank=0, world_size=1):
+def write_ambient_noise(results, result_path, ccconfig, rank=0, world_size=1,block=0):
     if not isinstance(result_path, Path):
         result_path = Path(result_path)
 
-    with h5py.File(result_path / f"{ccconfig.mode}_{rank:03d}_{world_size:03d}.h5", "a") as fp:
+    with h5py.File(result_path / f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_block_{block:02d}.h5", "a") as fp:
         for meta in results:
-            xcorr = meta["xcorr"].cpu().numpy()
+            #xcorr = meta["xcorr"].cpu().numpy()
+            xcorr = meta["xcorr"].numpy()
             nb, nch, nx, nt = xcorr.shape
             for i in range(nb):
                 data = np.squeeze(np.nan_to_num(xcorr[i, :, :, :]))
+                #data = np.squeeze(xcorr[i, :, :, :])
 
                 # for j, pair_id in enumerate(meta["pair_index"]):
                 for pair_id in meta["pair_index"]:
@@ -291,16 +293,16 @@ def write_ambient_noise(results, result_path, ccconfig, rank=0, world_size=1):
                             ds[:] = count / (count + 1) * ds[:] + data[..., j, :] / (count + 1)
                             ds.attrs["count"] = count + 1
 
-                        if f"{id2}/{id1}" not in fp:
-                            gp = fp.create_group(f"{id2}/{id1}")
-                            ds = gp.create_dataset("xcorr", data=np.flip(data[..., j, :], axis=-1))
-                            ds.attrs["count"] = 1
-                        else:
-                            gp = fp[f"{id2}/{id1}"]
-                            ds = gp["xcorr"]
-                            count = ds.attrs["count"]
-                            ds[:] = count / (count + 1) * ds[:] + np.flip(data[..., j, :], axis=-1) / (count + 1)
-                            ds.attrs["count"] = count + 1
+                        # if f"{id2}/{id1}" not in fp:
+                        #     gp = fp.create_group(f"{id2}/{id1}")
+                        #     ds = gp.create_dataset("xcorr", data=np.flip(data[..., j, :], axis=-1))
+                        #     ds.attrs["count"] = 1
+                        # else:
+                        #     gp = fp[f"{id2}/{id1}"]
+                        #     ds = gp["xcorr"]
+                        #     count = ds.attrs["count"]
+                        #     ds[:] = count / (count + 1) * ds[:] + np.flip(data[..., j, :], axis=-1) / (count + 1)
+                        #     ds.attrs["count"] = count + 1
 
 # def write_ambient_noise(results, fp, ccconfig, lock=nullcontext(), plot_figure=False):
 #     """

@@ -447,8 +447,8 @@ def main(args):
             data_path2=args.data_path2,
             data_format1=args.data_format1,
             data_format2=args.data_format2,
-            #device=args.device,
-            device='cpu',
+            device=args.device,
+            #device='cpu',
             transforms=preprocess,
             batch_size=args.batch_size,
             rank=rank,
@@ -536,7 +536,7 @@ def main(args):
     ccmodel = CCModel(
         config=ccconfig,
         batch_size=args.batch_size,  ## only useful for dataset_type == map
-        to_device=True,  ## to_device is done in dataset in default
+        to_device=False,  ## to_device is done in dataset in default
         device=args.device,
         transforms=postprocess,
         temporal_gradient_params=temporal_gradient_params,
@@ -799,29 +799,48 @@ def main(args):
         
             #print(type(result))
             t3 = time()    
+            
+            # with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_block_{i:02d}.h5"), "w") as fp:
+            #      #Store each key-value pair
+            #      for key, value in result.items():
+            #          if isinstance(value, np.ndarray):  # Save arrays directly
+            #              fp.create_dataset(key, data=value)
+            #          elif isinstance(value, torch.Tensor):  # Convert tensors to NumPy
+            #              fp.create_dataset(key, data=value.numpy())
+            #          elif isinstance(value, list):  # Convert list to NumPy
+            #              fp.create_dataset(key, data=np.array(value))
+            #          elif isinstance(value, (int, float, str)):  # Save scalars and strings
+            #              fp.attrs[key] = value
+            #          else:
+            #              print(f"Skipping key {key}: unsupported data type {type(value)}")
+
+
+            
+            #write_ambient_noise([result], args.result_path, ccconfig, rank, world_size, i)
+
+
             with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_block_{i:02d}.h5"), "w") as fp:
-                 # Store each key-value pair
-                 for key, value in result.items():
-                     if isinstance(value, np.ndarray):  # Save arrays directly
-                         # nlag = int(args.maxlag / args.dt)
-                         # left_sample = value.shape[-1]//2 - nlag
-                         # right_sample = value.shape[-1]//2 + nlag
-                         #fp.create_dataset(key, data=value[:,:,:,left_sample:right_sample])
-                         fp.create_dataset(key, data=value)
-                     elif isinstance(value, torch.Tensor):  # Convert tensors to NumPy
-                         fp.create_dataset(key, data=value.numpy())
-                     elif isinstance(value, list):  # Convert list to NumPy
-                         fp.create_dataset(key, data=np.array(value))
-                     elif isinstance(value, (int, float, str)):  # Save scalars and strings
-                         # if key == 'nlag':
-                         #     nlag = int(args.maxlag / args.dt)
-                         #     fp.attrs[key] = nlag
-                         # else:
-                         fp.attrs[key] = value
-                     else:
-                         print(f"Skipping key {key}: unsupported data type {type(value)}")
+
+                 xcorr = result["xcorr"].numpy()
+                 nb, nch, nx, nt = xcorr.shape
+                 for ii in range(nb):
+                     data = np.squeeze(np.nan_to_num(xcorr[ii, :, :, :]))
+                     #data = np.squeeze(xcorr[ii, :, :, :])
+                     #data = xcorr[ii, :, :, :]
+     
+                     # for j, pair_id in enumerate(meta["pair_index"]):
+                     for pair_id in result["pair_index"]:
+                         list1, list2 = pair_id
+     
+                         for j, (id1, id2) in enumerate(zip(list1, list2)):
+                             gp = fp.create_group(f"{id1}/{id2}")
+                             ds = gp.create_dataset("xcorr", data=data[..., j, :])
+                             ds.attrs["count"] = 1
+
+
+   
             t4 = time()
-            #print(str(i)+' write h5 time : ' + str(t4-t3))
+            print(str(i)+' write h5 time : ' + str(t4-t3))
 
     # if args.mode == "AN":
     #     MAX_THREADS = 32

@@ -123,8 +123,8 @@ class CCModel(nn.Module):
         ### data1 is the array with virture source channels so can not remove_spatial_median
         data2 = remove_spatial_median(data2)
 
-        #print(data1)
-        #print(data2)
+        #print(data1.shape)
+        #print(data2.shape)
 
         #print('Domain : ' + self.domain)
         if self.domain == "frequency":

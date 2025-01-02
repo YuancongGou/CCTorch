@@ -909,6 +909,34 @@ def read_mseed_3c(fname, response=None, highpass_filter=0.0, sampling_rate=100, 
     }
 
 
+# from multiprocessing import Pool
+
+# def read_h5_file_chunk(args):
+#     """Read a chunk of data from the HDF5 file (for parallel processing)."""
+#     file_name, dataset_name, start, end = args
+#     with h5py.File(file_name, "r") as f:
+#         data = f[dataset_name][start:end]
+#     return data
+    
+# def read_das_continuous_data_h5(file_name, dataset_keys=[],dataset_name="Acquisition/Raw[0]/RawData", num_processes=8):
+#     """Read the dataset in parallel using multiple processes."""
+#     with h5py.File(file_name, "r") as f:
+#         dataset_size = f[dataset_name].shape[0]
+
+#     # Divide the dataset into chunks
+#     chunk_size = dataset_size // num_processes
+#     chunks = [(file_name, dataset_name, i * chunk_size, (i + 1) * chunk_size) for i in range(num_processes)]
+#     chunks[-1] = (file_name, dataset_name, chunks[-1][2], dataset_size)  # Adjust the last chunk
+
+#     # Read chunks in parallel
+#     with Pool(num_processes) as pool:
+#         results = pool.map(read_h5_file_chunk, chunks)
+
+#     # Combine results
+#     data = np.concatenate(results, axis=0)
+#     info = {}
+#     return torch.tensor(data.T),info
+
 def read_das_continuous_data_h5(fn, dataset_keys=[]):
     #print('reading : '+str(fn))
     with h5py.File(fn, "r") as f:
@@ -920,9 +948,11 @@ def read_das_continuous_data_h5(fn, dataset_keys=[]):
             data = f['Acquisition']['Raw[0]']['RawData'][:].T
         else:
             raise ValueError("Cannot find data in the file")
-        info = {}
-        for key in dataset_keys:
-            info[key] = f[key][:]
+        # info = {}
+        # for key in dataset_keys:
+        #     info[key] = f[key][:]
+        info = {key: f[key][:] for key in dataset_keys if key in f}
+                
     return torch.tensor(data), info
 
 
@@ -1111,8 +1141,35 @@ class CCMapDataset(torch.utils.data.Dataset):
             raise ValueError(f"Unknown mode: {mode}")
     
         return {"data": data, "info": info}
+
+
+    # def read_h5_file_chunk(args):
+    #     """Read a chunk of data from the HDF5 file (for parallel processing)."""
+    #     file_name, dataset_name, start, end = args
+    #     with h5py.File(file_name, "r") as f:
+    #         data = f[dataset_name][start:end]
+    #     return data
+
+    # def read_das_continuous_data_h5(file_name, dataset_name="Acquisition/Raw[0]/RawData", num_processes=8):
+    #     """Read the dataset in parallel using multiple processes."""
+    #     with h5py.File(file_name, "r") as f:
+    #         dataset_size = f[dataset_name].shape[0]
     
+    #     # Divide the dataset into chunks
+    #     chunk_size = dataset_size // num_processes
+    #     chunks = [(file_name, dataset_name, i * chunk_size, (i + 1) * chunk_size) for i in range(num_processes)]
+    #     chunks[-1] = (file_name, dataset_name, chunks[-1][2], dataset_size)  # Adjust the last chunk
     
+    #     # Read chunks in parallel
+    #     with Pool(num_processes) as pool:
+    #         results = pool.map(read_h5_file_chunk, chunks)
+    
+    #     # Combine results
+    #     data = np.concatenate(results, axis=0)
+    #     return data.T
+
+
+
     
     def read_das_continuous_data_h5(fn, dataset_keys=[]):
         #print('reading : '+str(fn))
