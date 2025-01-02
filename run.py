@@ -156,7 +156,7 @@ class CCConfig:
     delta_channel: int
     left_channel: int
     right_channel: int
-    fixed_channels: bool
+    fixed_channels: int
     transform_on_file: bool
     transform_on_batch: bool
     transform_device: str
@@ -181,6 +181,8 @@ class CCConfig:
     shift_t: bool
     normalize: bool
 
+    stack_channel: int
+
     def __init__(self, args, config=None):
         # Initialize from args
         self.mode = args.mode
@@ -200,10 +202,11 @@ class CCConfig:
         self.spectral_whitening = True
         self.max_channel = args.max_channel
         self.min_channel = args.min_channel
-        self.delta_channel = args.delta_channel
+        #self.delta_channel = args.delta_channel
         self.left_channel = args.left_channel
         self.right_channel = args.right_channel
         self.fixed_channels = args.fixed_channels
+        #
         self.transform_on_file = True
         self.transform_on_batch = False
         self.transform_device = "cuda"
@@ -228,6 +231,10 @@ class CCConfig:
         self.min_obs = 8
         self.shift_t = args.shift_t
         self.normalize = args.normalize
+
+        self.stack_channel = 5
+        self.delta_channel = self.stack_channel if self.stack_channel else 1
+        
 
         # Override with values from config if provided
         if config is not None:
@@ -800,43 +807,23 @@ def main(args):
             #print(type(result))
             t3 = time()    
             
-            # with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_block_{i:02d}.h5"), "w") as fp:
-            #      #Store each key-value pair
-            #      for key, value in result.items():
-            #          if isinstance(value, np.ndarray):  # Save arrays directly
-            #              fp.create_dataset(key, data=value)
-            #          elif isinstance(value, torch.Tensor):  # Convert tensors to NumPy
-            #              fp.create_dataset(key, data=value.numpy())
-            #          elif isinstance(value, list):  # Convert list to NumPy
-            #              fp.create_dataset(key, data=np.array(value))
-            #          elif isinstance(value, (int, float, str)):  # Save scalars and strings
-            #              fp.attrs[key] = value
-            #          else:
-            #              print(f"Skipping key {key}: unsupported data type {type(value)}")
+            with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_block_{i:02d}.h5"), "w") as fp:
+                 #Store each key-value pair
+                 for key, value in result.items():
+                     if isinstance(value, np.ndarray):  # Save arrays directly
+                         fp.create_dataset(key, data=value)
+                     elif isinstance(value, torch.Tensor):  # Convert tensors to NumPy
+                         fp.create_dataset(key, data=value.numpy())
+                     elif isinstance(value, list):  # Convert list to NumPy
+                         fp.create_dataset(key, data=np.array(value))
+                     elif isinstance(value, (int, float, str)):  # Save scalars and strings
+                         fp.attrs[key] = value
+                     else:
+                         print(f"Skipping key {key}: unsupported data type {type(value)}")
 
 
             
             #write_ambient_noise([result], args.result_path, ccconfig, rank, world_size, i)
-
-
-            with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_block_{i:02d}.h5"), "w") as fp:
-
-                 xcorr = result["xcorr"].numpy()
-                 nb, nch, nx, nt = xcorr.shape
-                 for ii in range(nb):
-                     data = np.squeeze(np.nan_to_num(xcorr[ii, :, :, :]))
-                     #data = np.squeeze(xcorr[ii, :, :, :])
-                     #data = xcorr[ii, :, :, :]
-     
-                     # for j, pair_id in enumerate(meta["pair_index"]):
-                     for pair_id in result["pair_index"]:
-                         list1, list2 = pair_id
-     
-                         for j, (id1, id2) in enumerate(zip(list1, list2)):
-                             gp = fp.create_group(f"{id1}/{id2}")
-                             ds = gp.create_dataset("xcorr", data=data[..., j, :])
-                             ds.attrs["count"] = 1
-
 
    
             t4 = time()
