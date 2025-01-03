@@ -636,47 +636,51 @@ class CCIterableDataset(IterableDataset):
                 #print(len(index_i))
                 #print(index_j)
                 #print(len(index_j))
-                
-                # data_i = data[:, :, index_i, :].to(self.device)
-                # data_j = data[:, :, index_j, :].to(self.device)
 
-                data_i_stack = []
-                previous_indexi = None
+                if self.config.stack_channel == 1:
                 
-                for indexi in index_i:
+                   data_i = data[:, :, index_i, :].to(self.device)
+                   data_j = data[:, :, index_j, :].to(self.device)
 
-                    if not indexi == previous_indexi:
-                       # Calculate start and end indices for stack_channel//2
-                       start_index = max(0, indexi - self.config.stack_channel//2)  # Ensure we don't go below 0
-                       end_index = min(data.shape[2], indexi + self.config.stack_channel//2 + 1)  # Ensure we don't exceed the last index
+                else:
+
+                   data_i_stack = []
+                   previous_indexi = None
+                   
+                   for indexi in index_i:
+   
+                       if not indexi == previous_indexi:
+                          # Calculate start and end indices for stack_channel//2
+                          start_index = max(0, indexi - self.config.stack_channel//2)  # Ensure we don't go below 0
+                          end_index = min(data.shape[2], indexi + self.config.stack_channel//2 + 1)  # Ensure we don't exceed the last index
+                      
+                          # Slice and calculate the mean along the specified range
+                          mean_values = data[:, :, start_index:end_index, :].mean(dim=2)
+                          #print(mean_values.shape)
+                                 
+                       data_i_stack.append(mean_values)
+                       previous_indexi = indexi
+   
+                   data_i =  torch.stack(data_i_stack).permute(1, 2, 0, 3).to(self.device)
+   
+                   
+   
+                   data_j_stack = []
+                   
+                   for indexj in index_j:
+                       # Calculate start and end indices for index_i ± stack_channel//2
+                       start_index = max(0, indexj - self.config.stack_channel//2)  # Ensure we don't go below 0
+                       end_index = min(data.shape[2], indexj + self.config.stack_channel//2 + 1)  # Ensure we don't exceed the last index
                    
                        # Slice and calculate the mean along the specified range
                        mean_values = data[:, :, start_index:end_index, :].mean(dim=2)
-                       print(mean_values.shape)
-                              
-                    data_i_stack.append(mean_values)
-                    previous_indexi = indexi
-
-                data_i =  torch.stack(data_i_stack).permute(1, 2, 0, 3).to(self.device)
-
-                
-
-                data_j_stack = []
-                
-                for indexj in index_j:
-                    # Calculate start and end indices for index_i ± stack_channel//2
-                    start_index = max(0, indexj - self.config.stack_channel//2)  # Ensure we don't go below 0
-                    end_index = min(data.shape[2], indexj + self.config.stack_channel//2 + 1)  # Ensure we don't exceed the last index
-                
-                    # Slice and calculate the mean along the specified range
-                    mean_values = data[:, :, start_index:end_index, :].mean(dim=2)
-                    data_j_stack.append(mean_values)
-
-                data_j =  torch.stack(data_j_stack).permute(1, 2, 0, 3).to(self.device)
+                       data_j_stack.append(mean_values)
+   
+                   data_j =  torch.stack(data_j_stack).permute(1, 2, 0, 3).to(self.device)
                 
                 #print(data_i)
-                print(data_i.shape)
-                print(data_j.shape)
+                #print(data_i.shape)
+                #print(data_j.shape)
 
                 if (self.config.transform_on_batch) and (self.transforms is not None):
                     data_i = self.transforms(data_i)

@@ -264,11 +264,11 @@ def write_cc_pairs(results, fp, ccconfig, lock=nullcontext(), plot_figure=False)
     #                         plt.close(fig)
 
 
-def write_ambient_noise(results, result_path, ccconfig, rank=0, world_size=1,block=0):
+def write_ambient_noise(results, result_path, ccconfig, rank=0, world_size=1):
     if not isinstance(result_path, Path):
         result_path = Path(result_path)
 
-    with h5py.File(result_path / f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_block_{block:02d}.h5", "a") as fp:
+    with h5py.File(result_path / f"{ccconfig.mode}_{rank:03d}_{world_size:03d}.h5", "a") as fp:
         for meta in results:
             #xcorr = meta["xcorr"].cpu().numpy()
             xcorr = meta["xcorr"].numpy()

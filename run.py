@@ -205,8 +205,8 @@ class CCConfig:
         #self.delta_channel = args.delta_channel
         self.left_channel = args.left_channel
         self.right_channel = args.right_channel
-        self.fixed_channels = args.fixed_channels
-        #
+        #self.fixed_channels = args.fixed_channels
+        self.fixed_channels = list(np.arange(1024,10240,1024))
         self.transform_on_file = True
         self.transform_on_batch = False
         self.transform_device = "cuda"
@@ -454,8 +454,8 @@ def main(args):
             data_path2=args.data_path2,
             data_format1=args.data_format1,
             data_format2=args.data_format2,
-            device=args.device,
-            #device='cpu',
+            #device=args.device,
+            device='cpu',
             transforms=preprocess,
             batch_size=args.batch_size,
             rank=rank,
@@ -505,16 +505,16 @@ def main(args):
     dataloader = DataLoader(
         dataset,
         batch_size=None,
-        num_workers=args.workers if (args.dataset_type == "map") else 0,
+        num_workers=args.workers if (args.dataset_type == "map") else 4,
         #num_workers=args.workers,
         sampler=sampler if args.dataset_type == "map" else None,
-        pin_memory=False,
-        #pin_memory=True,
+        #pin_memory=False,
+        pin_memory=True,
         #prefetch_factor=2,
         #collate_fn=lambda x: x,
         collate_fn=identity_collate,
         #collate_fn=collate_fn,
-        #persistent_workers=True
+        persistent_workers=True
     )
 
     # dataloader = DataLoader(
@@ -543,7 +543,8 @@ def main(args):
     ccmodel = CCModel(
         config=ccconfig,
         batch_size=args.batch_size,  ## only useful for dataset_type == map
-        to_device=False,  ## to_device is done in dataset in default
+        #to_device=False,  ## to_device is done in dataset in default
+        to_device=True,  ## to_device is done in dataset in default
         device=args.device,
         transforms=postprocess,
         temporal_gradient_params=temporal_gradient_params,
@@ -793,8 +794,8 @@ def main(args):
 
                #data.to(arg.device)
                t1 = time() 
-               if i!=0:
-                  print(str(i)+' dataloader time : ' + str(t1-t4))
+               #if i!=0:
+                  #print(str(i)+' dataloader time : ' + str(t1-t4))
                result = ccmodel(data) 
                t2 = time()
                #print('model time : ' + str(time()-t1))
@@ -805,25 +806,47 @@ def main(args):
 
         
             #print(type(result))
-            t3 = time()    
-            
-            with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_block_{i:02d}.h5"), "w") as fp:
-                 #Store each key-value pair
-                 for key, value in result.items():
-                     if isinstance(value, np.ndarray):  # Save arrays directly
-                         fp.create_dataset(key, data=value)
-                     elif isinstance(value, torch.Tensor):  # Convert tensors to NumPy
-                         fp.create_dataset(key, data=value.numpy())
-                     elif isinstance(value, list):  # Convert list to NumPy
-                         fp.create_dataset(key, data=np.array(value))
-                     elif isinstance(value, (int, float, str)):  # Save scalars and strings
-                         fp.attrs[key] = value
-                     else:
-                         print(f"Skipping key {key}: unsupported data type {type(value)}")
+            t3 = time() 
 
-
+            if i%1 == 0:
             
-            #write_ambient_noise([result], args.result_path, ccconfig, rank, world_size, i)
+               with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_block_{i:02d}.h5"), "w") as fp:
+                    #Store each key-value pair
+                    for key, value in result.items():
+                        if isinstance(value, np.ndarray):  # Save arrays directly
+                            fp.create_dataset(key, data=value)
+                        elif isinstance(value, torch.Tensor):  # Convert tensors to NumPy
+                            fp.create_dataset(key, data=value.numpy())
+                        elif isinstance(value, list):  # Convert list to NumPy
+                            fp.create_dataset(key, data=np.array(value))
+                        elif isinstance(value, (int, float, str)):  # Save scalars and strings
+                            fp.attrs[key] = value
+                        else:
+                            print(f"Skipping key {key}: unsupported data type {type(value)}")
+   
+
+            with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_stacked.h5"), "a") as fp:
+                
+                 if "xcorr" not in fp:
+                    for key, value in result.items():
+                           if isinstance(value, np.ndarray):  # Save arrays directly
+                               fp.create_dataset(key, data=value)
+                           elif isinstance(value, torch.Tensor):  # Convert tensors to NumPy
+                               fp.create_dataset(key, data=value.numpy())
+                           elif isinstance(value, list):  # Convert list to NumPy
+                               fp.create_dataset(key, data=np.array(value))
+                           elif isinstance(value, (int, float, str)):  # Save scalars and strings
+                               fp.attrs[key] = value
+                           else:
+                               print(f"Skipping key {key}: unsupported data type {type(value)}")
+                    fp.attrs['count'] = 1
+                 else:
+                    ds = fp["xcorr"]
+                    count = fp.attrs["count"]
+                    data = result['xcorr'].numpy()
+                    ds[:] = count / (count + 1) * ds[:] + data[:] / (count + 1)
+                    fp.attrs["count"] = count + 1
+
 
    
             t4 = time()
