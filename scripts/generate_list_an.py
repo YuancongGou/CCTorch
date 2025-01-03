@@ -6,13 +6,13 @@ import h5py
 import pandas as pd
 
 # %%
-root_path = "tests"
-data_path = "data"
+#root_path = "tests"
+#data_path = "data"
 
 #root_path = '/home/gcl/RA/yuancong_gou/CCTorch/SeaFOAM/data/event'
-root_path = '/home/gcl/RA/yuancong_gou/CCTorch/SeaFOAM/data/event/eq_M4_plus'
+#root_path = '/home/gcl/RA/yuancong_gou/CCTorch/SeaFOAM/data/event/eq_M4_plus'
 #data_path = 'eq_M4_plus'
-data_path = 'nc75068161'
+#data_path = 'nc75068161'
 
 root_path = '/ref/das-mbari_1'
 data_path = '2022/2022.360'
@@ -26,7 +26,7 @@ data_path = '2022/2022.360'
 #     # )
 
 # %%
-files = sorted(glob.glob(f"{root_path}/{data_path}/*.h5"))
+files = sorted(glob.glob(f"{root_path}/{data_path}/*.h5"))[120:180]
 
 # %%
 pair_list = []

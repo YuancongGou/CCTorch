@@ -64,8 +64,9 @@ def get_args_parser(add_help=True):
     parser.add_argument("--maxlag", default=0.5, type=float, help="maximum time lag during cross-correlation")
     parser.add_argument("--batch_size", default=1024, type=int, help="batch size")
     parser.add_argument("--buffer_size", default=10, type=int, help="buffer size for writing to h5 file")
-    parser.add_argument("--workers", default=4, type=int, help="data loading workers")
+    parser.add_argument("--workers", default=16, type=int, help="data loading workers")
     parser.add_argument("--device", default="cpu", type=str, help="device (Use cpu/cuda/mps, Default: cpu)")
+    parser.add_argument("--dataset_cpu", action="store_true", help="Load data to cpu")
     parser.add_argument(
         "--dtype", default="float32", type=str, help="data type (Use float32 or float64, Default: float32)"
     )
@@ -172,7 +173,7 @@ def main(args):
         ### preprocessing for ambient noise
         transform_on_file = True
         transform_on_batch = False
-        transform_device = "cuda"
+        transform_device = "cpu"
         window_size = 64
         #### bandpass filter
         # fmin = 0.1
@@ -247,21 +248,21 @@ def main(args):
             preprocess.append(TemporalGradient(ccconfig.fs))
         # preprocess.append(TemporalMovingNormalization(int(ccconfig.maxlag * ccconfig.fs)))  # 30s for 25Hz
     
-        preprocess.append(
-            Filtering(
-                ccconfig.fmin,
-                ccconfig.fmax,
-                ccconfig.fs,
-                ccconfig.ftype,
-                ccconfig.alpha,
-                ccconfig.dtype,
-                ccconfig.transform_device,
-            )
-        )  # 50Hz # not working on M1
-        preprocess.append(Decimation(ccconfig.decimate_factor))  # 25Hz
-        #preprocess.append(T.Lambda(remove_spatial_median))
-        preprocess.append(TemporalMovingNormalization(int(2 * ccconfig.fs // ccconfig.decimate_factor)))  # 2s for 25Hz
-        preprocess.append(T.Lambda(remove_spatial_median))
+        # preprocess.append(
+        #     Filtering(
+        #         ccconfig.fmin,
+        #         ccconfig.fmax,
+        #         ccconfig.fs,
+        #         ccconfig.ftype,
+        #         ccconfig.alpha,
+        #         ccconfig.dtype,
+        #         ccconfig.transform_device,
+        #     )
+        # )  # 50Hz # not working on M1
+        # preprocess.append(Decimation(ccconfig.decimate_factor))  # 25Hz
+        # #preprocess.append(T.Lambda(remove_spatial_median))
+        # preprocess.append(TemporalMovingNormalization(int(2 * ccconfig.fs // ccconfig.decimate_factor)))  # 2s for 25Hz
+        # preprocess.append(T.Lambda(remove_spatial_median))
 
     preprocess = T.Compose(preprocess)
 
@@ -307,7 +308,7 @@ def main(args):
             data_path2=args.data_path2,
             data_format1=args.data_format1,
             data_format2=args.data_format2,
-            device=args.device,
+            device="cpu" if args.dataset_cpu else args.device,
             transforms=preprocess,
             batch_size=args.batch_size,
             rank=rank,
@@ -327,7 +328,8 @@ def main(args):
         dataset,
         batch_size=None,
         #batch_size=args.batch_size, 
-        num_workers=args.workers if args.dataset_type == "map" else 0,
+        #num_workers=args.workers if args.dataset_type == "map" else 0,
+        num_workers=args.workers if args.dataset_cpu else 0,
         sampler=sampler if args.dataset_type == "map" else None,
         pin_memory=False,
         collate_fn=lambda x: x,
@@ -336,7 +338,8 @@ def main(args):
     ccmodel = CCModel(
         config=ccconfig,
         batch_size=args.batch_size,  ## only useful for dataset_type == map
-        to_device=False,  ## to_device is done in dataset in default
+        #to_device=False,  ## to_device is done in dataset in default
+        to_device=args.dataset_cpu,
         device=args.device,
         transforms=postprocess,
     )
@@ -566,42 +569,42 @@ def main(args):
         events_df.to_csv(os.path.join(args.result_path, f"{ccconfig.mode}_{world_size:03d}_event.csv"), index=False)
 
 
-    if args.mode == "AN":
+    # if args.mode == "AN":
 
-        result_df = []
-        for i, data in enumerate(tqdm(dataloader, position=rank, desc=f"{rank}/{world_size}: computing")):
+    #     result_df = []
+    #     for i, data in enumerate(tqdm(dataloader, position=rank, desc=f"{rank}/{world_size}: computing")):
 
-            if args.dataset_type == 'iterable':
-               #t1 = time() 
-               #if i!=0:
-               #   print(str(i)+' dataloader time : ' + str(t1-t2))
-               result = ccmodel(data) 
-               #t2 = time()
-               #print('model time : ' + str(time()-t1))
+    #         if args.dataset_type == 'iterable':
+    #            #t1 = time() 
+    #            #if i!=0:
+    #            #   print(str(i)+' dataloader time : ' + str(t1-t2))
+    #            result = ccmodel(data) 
+    #            #t2 = time()
+    #            #print('model time : ' + str(time()-t1))
 
-            if args.dataset_type == 'map':
-               result = ccmodel.forward_map(data)
+    #         if args.dataset_type == 'map':
+    #            result = ccmodel.forward_map(data)
         
-            #print(type(result))
-            #t3 = time()    
-            with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_block_{i:02d}.h5"), "w") as fp:
-                 write_ambient_noise([result], fp, ccconfig)
+    #         #print(type(result))
+    #         #t3 = time()    
+    #         with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_block_{i:02d}.h5"), "w") as fp:
+    #              write_ambient_noise([result], fp, ccconfig)
                  #print('Writing : '+f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_block_{i:02d}.h5")
                 
 
-    # if args.mode == "AN":
-    #     MAX_THREADS = 32
-    #     with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}.h5"), "w") as fp:
-    #         with ThreadPoolExecutor(max_workers=16) as executor:
-    #             futures = set()
-    #             lock = threading.Lock()
-    #             for data in tqdm(dataloader, position=rank, desc=f"{args.mode}: {rank}/{world_size}"):
-    #                 result = ccmodel(data)
-    #                 thread = executor.submit(write_ambient_noise, [result], fp, ccconfig, lock)
-    #                 futures.add(thread)
-    #                 if len(futures) >= MAX_THREADS:
-    #                     done, futures = wait(futures, return_when=FIRST_COMPLETED)
-    #             executor.shutdown(wait=True)
+    if args.mode == "AN":
+        MAX_THREADS = 32
+        with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}.h5"), "w") as fp:
+            with ThreadPoolExecutor(max_workers=16) as executor:
+                futures = set()
+                lock = threading.Lock()
+                for data in tqdm(dataloader, position=rank, desc=f"{args.mode}: {rank}/{world_size}"):
+                    result = ccmodel(data)
+                    thread = executor.submit(write_ambient_noise, [result], fp, ccconfig, lock)
+                    futures.add(thread)
+                    if len(futures) >= MAX_THREADS:
+                        done, futures = wait(futures, return_when=FIRST_COMPLETED)
+                executor.shutdown(wait=True)
 
 
 if __name__ == "__main__":
