@@ -30,6 +30,8 @@ from time import time
 
 from cctorch import CCMapDataset
 
+import shutil
+
 # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 # os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
@@ -786,6 +788,9 @@ def main(args):
     if args.mode == "AN":
 
         result_df = []
+
+        count = 0
+        
         for i, data in enumerate(tqdm(dataloader, position=rank, desc=f"{rank}/{world_size}: computing")):
 
             #print(data[0])
@@ -808,49 +813,83 @@ def main(args):
             #print(type(result))
             t3 = time() 
 
-            if i%1 == 0:
+            # if i%1 == 0:
             
-               with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_block_{i:02d}.h5"), "w") as fp:
+            #    with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_block_{i:02d}.h5"), "w") as fp:
+            #         #Store each key-value pair
+            #         for key, value in result.items():
+            #             if isinstance(value, np.ndarray):  # Save arrays directly
+            #                 fp.create_dataset(key, data=value)
+            #             elif isinstance(value, torch.Tensor):  # Convert tensors to NumPy
+            #                 fp.create_dataset(key, data=value.numpy())
+            #             elif isinstance(value, list):  # Convert list to NumPy
+            #                 fp.create_dataset(key, data=np.array(value))
+            #             elif isinstance(value, (int, float, str)):  # Save scalars and strings
+            #                 fp.attrs[key] = value
+            #             else:
+            #                 print(f"Skipping key {key}: unsupported data type {type(value)}")
+
+            
+            count += 1
+            if count == 1:
+               data_stack = result['xcorr']
+            else:
+               data = result['xcorr']
+               data_stack = count / (count + 1) * data_stack[:] + data[:] / (count + 1)
+
+            if count%60 == 0:
+            
+               with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_{i+1:02d}_stack.h5"), "w") as fp:
                     #Store each key-value pair
                     for key, value in result.items():
-                        if isinstance(value, np.ndarray):  # Save arrays directly
-                            fp.create_dataset(key, data=value)
-                        elif isinstance(value, torch.Tensor):  # Convert tensors to NumPy
-                            fp.create_dataset(key, data=value.numpy())
+                        if isinstance(value, torch.Tensor):  # Convert tensors to NumPy
+                            fp.create_dataset(key, data=data_stack.numpy())
                         elif isinstance(value, list):  # Convert list to NumPy
                             fp.create_dataset(key, data=np.array(value))
                         elif isinstance(value, (int, float, str)):  # Save scalars and strings
                             fp.attrs[key] = value
                         else:
                             print(f"Skipping key {key}: unsupported data type {type(value)}")
-   
+                    fp.attrs['count'] = count
 
-            with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_stacked.h5"), "a") as fp:
-                
-                 if "xcorr" not in fp:
-                    for key, value in result.items():
-                           if isinstance(value, np.ndarray):  # Save arrays directly
-                               fp.create_dataset(key, data=value)
-                           elif isinstance(value, torch.Tensor):  # Convert tensors to NumPy
-                               fp.create_dataset(key, data=value.numpy())
-                           elif isinstance(value, list):  # Convert list to NumPy
-                               fp.create_dataset(key, data=np.array(value))
-                           elif isinstance(value, (int, float, str)):  # Save scalars and strings
-                               fp.attrs[key] = value
-                           else:
-                               print(f"Skipping key {key}: unsupported data type {type(value)}")
-                    fp.attrs['count'] = 1
-                 else:
-                    ds = fp["xcorr"]
-                    count = fp.attrs["count"]
-                    data = result['xcorr'].numpy()
-                    ds[:] = count / (count + 1) * ds[:] + data[:] / (count + 1)
-                    fp.attrs["count"] = count + 1
+               count = 0
+
+            
+            # with h5py.File(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_stacked.h5"), "a") as fp:
+                 
+            #      if "xcorr" not in fp:
+            #         for key, value in result.items():
+            #                if isinstance(value, np.ndarray):  # Save arrays directly
+            #                    fp.create_dataset(key, data=value)
+            #                elif isinstance(value, torch.Tensor):  # Convert tensors to NumPy
+            #                    fp.create_dataset(key, data=value.numpy())
+            #                elif isinstance(value, list):  # Convert list to NumPy
+            #                    fp.create_dataset(key, data=np.array(value))
+            #                elif isinstance(value, (int, float, str)):  # Save scalars and strings
+            #                    fp.attrs[key] = value
+            #                else:
+            #                    print(f"Skipping key {key}: unsupported data type {type(value)}")
+            #         fp.attrs['count'] = 1
+            #      else:
+            #         ds = fp["xcorr"]
+            #         count = fp.attrs["count"]
+            #         #count = i
+            #         data = result['xcorr'].numpy()
+            #         t5 = time()
+            #         ds[:] = count / (count + 1) * ds[:] + data[:] / (count + 1)
+            #         t6 = time()
+            #         fp.attrs["count"] = count + 1
+            #         print(str(i)+' stacking time : ' + str(t6-t5))
 
 
-   
+            # if (i+1)%60 == 0:
+            
+            #    shutil.copy(os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_stacked.h5"),
+            #                os.path.join(args.result_path, f"{ccconfig.mode}_{rank:03d}_{world_size:03d}_{i:02d}_stacked.h5"))
+                                        
             t4 = time()
             print(str(i)+' write h5 time : ' + str(t4-t3))
+            
 
     # if args.mode == "AN":
     #     MAX_THREADS = 32
