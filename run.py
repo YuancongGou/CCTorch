@@ -208,12 +208,14 @@ class CCConfig:
         self.left_channel = args.left_channel
         self.right_channel = args.right_channel
         #self.fixed_channels = args.fixed_channels
-        self.fixed_channels = list(np.arange(1024,10240,1024))
+        # self.fixed_channels = list(np.arange(1024,10240,1024))
+        # self.fixed_channels = list(np.arange(1024,10240,512))
+        self.fixed_channels = list(np.arange(1024,10240,256))
         self.transform_on_file = True
         self.transform_on_batch = False
         self.transform_device = "cuda"
         self.window_size = 64
-        self.fmin = 0.5
+        self.fmin = 0.1
         self.fmax = 10
         self.ftype = "bandpass"
         self.alpha = 0.05  # tukey window parameter
